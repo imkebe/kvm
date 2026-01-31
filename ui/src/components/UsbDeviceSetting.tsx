@@ -23,6 +23,8 @@ export interface UsbDeviceConfig {
   absolute_mouse: boolean;
   relative_mouse: boolean;
   mass_storage: boolean;
+  usb_camera: boolean;
+  usb_ethernet: boolean;
 }
 
 const defaultUsbDeviceConfig: UsbDeviceConfig = {
@@ -30,6 +32,8 @@ const defaultUsbDeviceConfig: UsbDeviceConfig = {
   absolute_mouse: true,
   relative_mouse: true,
   mass_storage: true,
+  usb_camera: false,
+  usb_ethernet: false,
 };
 
 const usbPresets = [
@@ -41,6 +45,8 @@ const usbPresets = [
       absolute_mouse: true,
       relative_mouse: true,
       mass_storage: true,
+      usb_camera: false,
+      usb_ethernet: false,
     },
   },
   {
@@ -51,6 +57,8 @@ const usbPresets = [
       absolute_mouse: false,
       relative_mouse: false,
       mass_storage: false,
+      usb_camera: false,
+      usb_ethernet: false,
     },
   },
   {
@@ -215,6 +223,28 @@ export function UsbDeviceSetting() {
                 <Checkbox
                   checked={usbDeviceConfig.mass_storage}
                   onChange={onUsbConfigItemChange("mass_storage")}
+                />
+              </SettingsItem>
+            </div>
+            <div className="space-y-4">
+              <SettingsItem
+                title="Enable USB Camera"
+                description="Expose JetKVM as a USB webcam using the browser video stream"
+              >
+                <Checkbox
+                  checked={usbDeviceConfig.usb_camera}
+                  onChange={onUsbConfigItemChange("usb_camera")}
+                />
+              </SettingsItem>
+            </div>
+            <div className="space-y-4">
+              <SettingsItem
+                title="Enable USB Ethernet"
+                description="Share JetKVM's network connection with the controlled host over USB"
+              >
+                <Checkbox
+                  checked={usbDeviceConfig.usb_ethernet}
+                  onChange={onUsbConfigItemChange("usb_ethernet")}
                 />
               </SettingsItem>
             </div>

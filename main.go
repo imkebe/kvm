@@ -66,6 +66,7 @@ func Main() {
 
 	// initialize usb gadget
 	initUsbGadget()
+	initUsbExtensions()
 	if err := setInitialVirtualMediaState(); err != nil {
 		logger.Warn().Err(err).Msg("failed to set initial virtual media state")
 	}

@@ -151,6 +151,8 @@ var (
 		RelativeMouse: true,
 		Keyboard:      true,
 		MassStorage:   true,
+		UsbCamera:     false,
+		UsbEthernet:   false,
 	}
 )
 
