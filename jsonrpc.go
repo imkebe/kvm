@@ -19,6 +19,7 @@ import (
 	"go.bug.st/serial"
 
 	"github.com/jetkvm/kvm/internal/hidrpc"
+	"github.com/jetkvm/kvm/internal/usbext"
 	"github.com/jetkvm/kvm/internal/usbgadget"
 	"github.com/jetkvm/kvm/internal/utils"
 )
@@ -915,9 +916,16 @@ func rpcGetUsbDevices() (usbgadget.Devices, error) {
 	return *config.UsbDevices, nil
 }
 
+func rpcGetUsbExtensionStatus() (usbext.Status, error) {
+	return getUsbExtensionStatus(), nil
+}
+
 func updateUsbRelatedConfig() error {
 	if err := gadget.UpdateGadgetConfig(); err != nil {
 		return fmt.Errorf("failed to write gadget config: %w", err)
+	}
+	if err := applyUsbExtensionDeviceConfig(); err != nil {
+		return fmt.Errorf("failed to apply usb extension config: %w", err)
 	}
 	if err := SaveConfig(); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
@@ -941,6 +949,10 @@ func rpcSetUsbDeviceState(device string, enabled bool) error {
 		config.UsbDevices.Keyboard = enabled
 	case "massStorage":
 		config.UsbDevices.MassStorage = enabled
+	case "usbCamera", "usb_camera":
+		config.UsbDevices.UsbCamera = enabled
+	case "usbEthernet", "usb_ethernet":
+		config.UsbDevices.UsbEthernet = enabled
 	default:
 		return fmt.Errorf("invalid device: %s", device)
 	}
@@ -1264,6 +1276,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getSerialSettings":      {Func: rpcGetSerialSettings},
 	"setSerialSettings":      {Func: rpcSetSerialSettings, Params: []string{"settings"}},
 	"getUsbDevices":          {Func: rpcGetUsbDevices},
+	"getUsbExtensionStatus":  {Func: rpcGetUsbExtensionStatus},
 	"setUsbDevices":          {Func: rpcSetUsbDevices, Params: []string{"devices"}},
 	"setUsbDeviceState":      {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},
 	"setCloudUrl":            {Func: rpcSetCloudUrl, Params: []string{"apiUrl", "appUrl"}},
