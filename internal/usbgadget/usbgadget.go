@@ -21,6 +21,8 @@ type Devices struct {
 	Keyboard      bool `json:"keyboard"`
 	MassStorage   bool `json:"mass_storage"`
 	SerialConsole bool `json:"serial_console"`
+	Video         bool `json:"video"`
+	Network       bool `json:"network"`
 }
 
 // Config is a struct that represents the customizations for a USB gadget.

@@ -243,6 +243,25 @@ func (tx *UsbGadgetTransaction) writeGadgetItemConfig(item gadgetConfigItem, dep
 	}
 	files = append(files, reportDescPath)
 
+	if len(item.symlinks) > 0 {
+		for _, link := range item.symlinks {
+			linkPath := joinPath(gadgetItemPath, link.path)
+			targetPath := joinPath(gadgetItemPath, link.target)
+			parentDir := path.Dir(linkPath)
+			parentDirChange := tx.mkdirAll(component, parentDir, "create symlink parent directory", files)
+			files = append(files, parentDirChange)
+			tx.addFileChange(component, RequestedFileChange{
+				Path:            linkPath,
+				ExpectedState:   FileStateSymlink,
+				ExpectedContent: []byte(targetPath),
+				Description:     "create gadget internal symlink",
+				BeforeChange:    beforeChange,
+				DependsOn:       files,
+			})
+			files = append(files, linkPath)
+		}
+	}
+
 	// create config directory if configAttrs are set
 	if len(item.configAttrs) > 0 {
 		configItemPath := joinPath(tx.configC1Path, item.configPath)

@@ -174,6 +174,9 @@ var (
 		RelativeMouse: true,
 		Keyboard:      true,
 		MassStorage:   true,
+		SerialConsole: false,
+		Video:         false,
+		Network:       false,
 	}
 )
 

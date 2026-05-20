@@ -66,6 +66,8 @@ func Main() {
 	// initialize usb gadget
 	setProcTitle("initUsbGadget")
 	initUsbGadget()
+	initVirtualVideo()
+	initUSBNetwork()
 
 	setProcTitle("initNative")
 	initNative(systemVersionLocal, appVersionLocal)
@@ -174,6 +176,7 @@ func Main() {
 	if config.TLSMode != "" {
 		startWebSecureServer()
 	}
+	go RunVirtualVideoWebTransportServer()
 
 	// As websocket client already checks if the cloud token is set, we can start it here.
 	go RunWebsocketClient()

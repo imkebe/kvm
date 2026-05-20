@@ -26,6 +26,8 @@ export interface UsbDeviceConfig {
   relative_mouse: boolean;
   mass_storage: boolean;
   serial_console: boolean;
+  video: boolean;
+  network: boolean;
 }
 
 const defaultUsbDeviceConfig: UsbDeviceConfig = {
@@ -34,6 +36,8 @@ const defaultUsbDeviceConfig: UsbDeviceConfig = {
   relative_mouse: true,
   mass_storage: true,
   serial_console: false,
+  video: false,
+  network: false,
 };
 
 const usbPresets = [
@@ -46,6 +50,8 @@ const usbPresets = [
       relative_mouse: true,
       mass_storage: true,
       serial_console: false,
+      video: false,
+      network: false,
     },
   },
   {
@@ -57,6 +63,8 @@ const usbPresets = [
       relative_mouse: false,
       mass_storage: false,
       serial_console: false,
+      video: false,
+      network: false,
     },
   },
   {
@@ -234,6 +242,28 @@ export function UsbDeviceSetting() {
                 <Checkbox
                   checked={usbDeviceConfig.serial_console}
                   onChange={onUsbConfigItemChange("serial_console")}
+                />
+              </SettingsItem>
+            </div>
+            <div className="space-y-4">
+              <SettingsItem
+                title="Enable USB Video"
+                description="Expose a UVC camera class to the target computer"
+              >
+                <Checkbox
+                  checked={usbDeviceConfig.video}
+                  onChange={onUsbConfigItemChange("video")}
+                />
+              </SettingsItem>
+            </div>
+            <div className="space-y-4">
+              <SettingsItem
+                title="Enable USB Network"
+                description="Expose a USB Ethernet class to the target computer"
+              >
+                <Checkbox
+                  checked={usbDeviceConfig.network}
+                  onChange={onUsbConfigItemChange("network")}
                 />
               </SettingsItem>
             </div>

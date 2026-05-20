@@ -10,6 +10,7 @@ import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { SettingsSectionHeader } from "@components/SettingsSectionHeader";
 import { NestedSettingsGroup } from "@components/NestedSettingsGroup";
 import { UsbDeviceSetting } from "@components/UsbDeviceSetting";
+import { VirtualVideoSetting } from "@components/VirtualVideoSetting";
 import { UsbInfoSetting } from "@components/UsbInfoSetting";
 import notifications from "@/notifications";
 import { m } from "@localizations/messages.js";
@@ -238,6 +239,8 @@ export default function SettingsHardwareRoute() {
       <FeatureFlag minAppVersion="0.3.8">
         <UsbDeviceSetting />
       </FeatureFlag>
+
+      <VirtualVideoSetting />
 
       <FeatureFlag minAppVersion="0.3.8">
         <UsbInfoSetting />

@@ -407,6 +407,20 @@ func newSession(config SessionConfig) (*Session, error) {
 			handleSerialChannel(d)
 		case "cdcacm":
 			handleCDCACMChannel(d)
+		case "camera-mjpeg":
+			d.OnMessage(func(msg webrtc.DataChannelMessage) {
+				if msg.IsString {
+					scopedLogger.Warn().Msg("received string data on camera-mjpeg channel")
+					return
+				}
+				if virtualVideo == nil {
+					scopedLogger.Warn().Msg("virtual video manager is not initialized")
+					return
+				}
+				if err := virtualVideo.HandleFrameData(msg.Data, "rtc-datachannel"); err != nil {
+					scopedLogger.Warn().Err(err).Msg("failed to handle virtual video frame")
+				}
+			})
 		default:
 			if strings.HasPrefix(d.Label(), uploadIdPrefix) {
 				go handleUploadChannel(d)

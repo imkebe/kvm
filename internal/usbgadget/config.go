@@ -13,9 +13,15 @@ type gadgetConfigItem struct {
 	configAttrs gadgetAttributes
 	configPath  []string
 	reportDesc  []byte
+	symlinks    []gadgetSymlink
 }
 
 type gadgetAttributes map[string]string
+
+type gadgetSymlink struct {
+	path   []string
+	target []string
+}
 
 type gadgetConfigItemWithKey struct {
 	key  string
@@ -62,6 +68,18 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 	"mass_storage_lun0": massStorageLun0Config,
 	// serial console (CDC-ACM)
 	"serial_console": serialConsoleConfig,
+	// virtual camera (UVC)
+	"video_base":                videoBaseConfig,
+	"video_control_header":      videoControlHeaderConfig,
+	"video_control_class_fs":    videoControlClassFSConfig,
+	"video_streaming_mjpeg":     videoStreamingMJPEGConfig,
+	"video_streaming_mjpeg_480": videoStreamingMJPEG480Config,
+	"video_streaming_mjpeg_720": videoStreamingMJPEG720Config,
+	"video_streaming_header":    videoStreamingHeaderConfig,
+	"video_streaming_class_fs":  videoStreamingClassFSConfig,
+	"video_links":               videoLinksConfig,
+	// virtual USB network
+	"network": networkConfig,
 }
 
 func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
@@ -78,6 +96,18 @@ func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
 		return u.enabledDevices.MassStorage
 	case "serial_console":
 		return u.enabledDevices.SerialConsole
+	case "video_base",
+		"video_control_header",
+		"video_control_class_fs",
+		"video_streaming_mjpeg",
+		"video_streaming_mjpeg_480",
+		"video_streaming_mjpeg_720",
+		"video_streaming_header",
+		"video_streaming_class_fs",
+		"video_links":
+		return u.enabledDevices.Video
+	case "network":
+		return u.enabledDevices.Network
 	default:
 		return true
 	}

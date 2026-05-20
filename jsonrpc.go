@@ -936,6 +936,10 @@ func rpcSetUsbDeviceState(device string, enabled bool) error {
 		config.UsbDevices.MassStorage = enabled
 	case "serialConsole":
 		config.UsbDevices.SerialConsole = enabled
+	case "video":
+		config.UsbDevices.Video = enabled
+	case "network":
+		config.UsbDevices.Network = enabled
 	default:
 		return fmt.Errorf("invalid device: %s", device)
 	}
@@ -1331,6 +1335,14 @@ var rpcHandlers = map[string]RPCHandler{
 	"getUsbDevices":              {Func: rpcGetUsbDevices},
 	"setUsbDevices":              {Func: rpcSetUsbDevices, Params: []string{"devices"}},
 	"setUsbDeviceState":          {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},
+	"getVirtualVideoState":       {Func: rpcGetVirtualVideoState},
+	"setVirtualVideoConfig":      {Func: rpcSetVirtualVideoConfig, Params: []string{"config"}},
+	"startVirtualVideo":          {Func: rpcStartVirtualVideo},
+	"stopVirtualVideo":           {Func: rpcStopVirtualVideo},
+	"getUsbNetworkState":         {Func: rpcGetUSBNetworkState},
+	"setUsbNetworkConfig":        {Func: rpcSetUSBNetworkConfig, Params: []string{"config"}},
+	"startUsbNetwork":            {Func: rpcStartUSBNetwork},
+	"stopUsbNetwork":             {Func: rpcStopUSBNetwork},
 	"setCloudUrl":                {Func: rpcSetCloudUrl, Params: []string{"apiUrl", "appUrl"}},
 	"getKeyboardLayout":          {Func: rpcGetKeyboardLayout},
 	"setKeyboardLayout":          {Func: rpcSetKeyboardLayout, Params: []string{"layout"}},
