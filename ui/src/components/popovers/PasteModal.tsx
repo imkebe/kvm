@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClose } from "@headlessui/react";
 import { ExclamationCircleIcon } from "@heroicons/react/16/solid";
 import { LuCornerDownLeft, LuEye, LuEyeOff } from "react-icons/lu";
+import { MdTouchApp } from "react-icons/md";
 
 import { cx } from "@/cva.config";
 import { m } from "@localizations/messages.js";
@@ -11,6 +12,7 @@ import useGuestClipboard, { clipboardShortcut } from "@hooks/useGuestClipboard";
 import useKeyboard, { type MacroStep } from "@hooks/useKeyboard";
 import useKeyboardLayout from "@hooks/useKeyboardLayout";
 import notifications from "@/notifications";
+import { isMac } from "@/utils";
 import { Button } from "@components/Button";
 import { GridCard } from "@components/Card";
 import { InputFieldWithLabel } from "@components/InputField";
@@ -26,6 +28,9 @@ export default function PasteModal() {
   const { isPasteInProgress } = useHidStore();
   const [textValue, setTextValue] = useState("");
   const [hideText, setHideText] = useState(false);
+  // Opened by a paste chord whose clipboard the browser did not hand over:
+  // the next paste into the box goes straight to the target.
+  const [awaitingPaste, setAwaitingPaste] = useState(false);
   const { setDisableVideoFocusTrap, pendingPasteText, setPendingPasteText } = useUiStore();
 
   const { send } = useJsonRpc();
@@ -43,6 +48,10 @@ export default function PasteModal() {
   const close = useClose();
 
   const debugMode = useSettingsStore(state => state.debugMode);
+  const pasteAsKeystrokes = useSettingsStore(state => state.pasteAsKeystrokes);
+  // OS Services pastes through the computer's clipboard; keystrokes are the
+  // other way (a locked screen does not take the clipboard paste).
+  const clipboardPaste = !!guestClipboard?.write && !pasteAsKeystrokes;
   const delayClassName = useMemo(() => (debugMode ? "" : "hidden"), [debugMode]);
 
   const { setKeyboardLayout } = useSettingsStore();
@@ -81,18 +90,18 @@ export default function PasteModal() {
     if (pendingPasteText === null) return;
     setTextValue(pendingPasteText);
     updateInvalidChars(pendingPasteText);
+    setAwaitingPaste(pendingPasteText === "" && clipboardPaste);
     setPendingPasteText(null);
-  }, [pendingPasteText, setPendingPasteText, updateInvalidChars]);
+    TextAreaRef.current?.focus();
+  }, [pendingPasteText, setPendingPasteText, updateInvalidChars, clipboardPaste]);
 
-  const onConfirmPaste = useCallback(async () => {
+  // Types the text key by key in the selected keyboard layout.
+  const typeText = useCallback(async () => {
     if (!selectedKeyboard) return;
 
     const text = textValue;
 
     try {
-      // An OS Services clipboard pastes the text whole; without one it is typed.
-      if ((await pasteViaGuest(text)) !== "unavailable") return;
-
       const macroSteps: MacroStep[] = [];
 
       for (const char of text) {
@@ -139,7 +148,18 @@ export default function PasteModal() {
       console.error("Failed to paste text:", error);
       notifications.error(m.paste_modal_failed_paste({ error: String(error) }));
     }
-  }, [selectedKeyboard, executeMacro, delay, textValue, pasteViaGuest]);
+  }, [selectedKeyboard, executeMacro, delay, textValue]);
+
+  const onConfirmPaste = useCallback(async () => {
+    // An OS Services clipboard pastes the text whole; without one it is typed.
+    try {
+      if ((await pasteViaGuest(textValue)) !== "unavailable") return;
+    } catch (error) {
+      notifications.error(m.paste_modal_failed_paste({ error: String(error) }));
+      return;
+    }
+    await typeText();
+  }, [pasteViaGuest, textValue, typeText]);
 
   useEffect(() => {
     TextAreaRef.current?.focus();
@@ -168,6 +188,11 @@ export default function PasteModal() {
                     onKeyDownCapture={e => e.stopPropagation()}
                     onKeyUpCapture={e => e.stopPropagation()}
                   >
+                    {awaitingPaste && (
+                      <p className="mb-2 rounded-md bg-blue-50 p-2 text-xs text-blue-900 dark:bg-blue-900/30 dark:text-blue-100">
+                        {m.paste_modal_press_paste({ shortcut: isMac() ? "⌘V" : "Ctrl+V" })}
+                      </p>
+                    )}
                     <div className="space-y-1">
                       <TextAreaWithLabel
                         ref={TextAreaRef}
@@ -197,7 +222,11 @@ export default function PasteModal() {
                         }
                         rows={4}
                         value={textValue}
-                        style={hideText ? { WebkitTextSecurity: "disc" } : undefined}
+                        style={
+                          hideText
+                            ? ({ WebkitTextSecurity: "disc" } as React.CSSProperties)
+                            : undefined
+                        }
                         onKeyUp={e => e.stopPropagation()}
                         maxLength={pasteMaxLength}
                         onKeyDown={e => {
@@ -209,6 +238,18 @@ export default function PasteModal() {
                             e.preventDefault();
                             onCancelPasteMode();
                           }
+                        }}
+                        onPaste={e => {
+                          if (!awaitingPaste) return;
+                          const text = e.clipboardData.getData("text/plain");
+                          if (!text) return;
+                          e.preventDefault();
+                          setAwaitingPaste(false);
+                          setTextValue(text);
+                          updateInvalidChars(text);
+                          void pasteViaGuest(text).then(result => {
+                            if (result === "pasted") close();
+                          });
                         }}
                         onChange={e => {
                           const value = e.target.value;
@@ -253,7 +294,7 @@ export default function PasteModal() {
                     ))}
                 </div>
                 <div className="space-y-1">
-                  {!guestClipboard?.write && (
+                  {!clipboardPaste && (
                     <p className="text-xs text-slate-600 dark:text-slate-400">
                       {m.paste_modal_sending_using_layout({
                         iso: selectedKeyboard.isoCode,
@@ -290,6 +331,16 @@ export default function PasteModal() {
               close();
             }}
           />
+          {clipboardPaste && (
+            <Button
+              size="SM"
+              theme="light"
+              text={m.paste_modal_type_keystrokes()}
+              disabled={isPasteInProgress}
+              onClick={typeText}
+              LeadingIcon={MdTouchApp}
+            />
+          )}
           <Button
             size="SM"
             theme="primary"

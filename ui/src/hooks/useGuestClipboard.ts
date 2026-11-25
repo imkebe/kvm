@@ -1,6 +1,12 @@
 import { useCallback } from "react";
 
-import { useCapability, useRTCStore, useUiStore, useVideoStore } from "@hooks/stores";
+import {
+  useCapability,
+  useRTCStore,
+  useSettingsStore,
+  useUiStore,
+  useVideoStore,
+} from "@hooks/stores";
 import useKeyboard from "@hooks/useKeyboard";
 import { useCopyToClipboard } from "@components/useCopyToClipBoard";
 import notifications from "@/notifications";
@@ -120,9 +126,11 @@ export default function useGuestClipboard() {
   const withdraw = useCallback(() => setGuestClipboard(null), [setGuestClipboard]);
 
   // Puts text on the guest clipboard and presses the guest OS paste shortcut.
+  const pasteAsKeystrokes = useSettingsStore(state => state.pasteAsKeystrokes);
   const pasteViaGuest = useCallback(
     (text: string): Promise<PasteResult> => {
-      if (!guestClipboard?.write) return Promise.resolve("unavailable");
+      // Keystroke mode: the caller types the text instead.
+      if (!guestClipboard?.write || pasteAsKeystrokes) return Promise.resolve("unavailable");
       return exclusive<PasteResult>("failed", async () => {
         if (!fitsGuestClipboard(text)) {
           notifications.error(m.clipboard_too_large());
@@ -156,7 +164,7 @@ export default function useGuestClipboard() {
         }
       });
     },
-    [guestClipboard, withdraw, resetKeyboardState, executeMacro],
+    [guestClipboard, pasteAsKeystrokes, withdraw, resetKeyboardState, executeMacro],
   );
 
   const recognizeScreenText = useCallback(() => {
