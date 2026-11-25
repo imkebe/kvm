@@ -35,6 +35,7 @@ import PasteModal from "@components/popovers/PasteModal";
 import WakeOnLanModal from "@components/popovers/WakeOnLan/Index";
 import MountPopopover from "@components/popovers/MountPopover";
 import ExtensionPopover from "@components/popovers/ExtensionPopover";
+import USBDevicesMenu from "@components/popovers/USBDevicesMenu";
 import CaptureButtons from "@components/CaptureButtons";
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
 import { m } from "@localizations/messages.js";
@@ -76,6 +77,7 @@ export default function Actionbar({
   const shell = useCapability("shell");
   const kvmTerminal = developerMode && shell;
   const extensions = useCapability("extensions");
+  const usbVirtualDevices = useCapability("usb_virtual_devices");
   const usbSerial = useCapability("usb_serial");
   const usbSerialConsole = usbSerialConsoleEnabled && usbSerial;
   // An OS Services sender on a device with OS Services can offer a shell.
@@ -313,6 +315,7 @@ export default function Actionbar({
         </div>
 
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          {usbVirtualDevices && <USBDevicesMenu />}
           {extensions && (
             <Popover>
               <PopoverButton as={Fragment}>

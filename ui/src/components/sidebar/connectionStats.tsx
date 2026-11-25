@@ -12,6 +12,19 @@ import { GridCard } from "@components/Card";
 import { Button } from "@components/Button";
 import { useCopyToClipboard } from "@components/useCopyToClipBoard";
 import notifications from "@/notifications";
+import { useCameraWatch, useVirtualCamera } from "@hooks/VirtualCameraProvider";
+import { useMediaDeviceStats } from "@hooks/useMediaDeviceStats";
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <div className="text-slate-600 dark:text-slate-400">{label}</div>
+      <div className="min-w-0 text-right font-mono text-xs break-words text-black dark:text-white">
+        {value}
+      </div>
+    </div>
+  );
+}
 
 export default function ConnectionStatsSidebar() {
   const { sidebarView, setSidebarView } = useUiStore();
@@ -26,6 +39,13 @@ export default function ConnectionStatsSidebar() {
     appendRemoteCandidateStats,
     appendDiskDataChannelStats,
   } = useRTCStore();
+
+  const camera = useVirtualCamera();
+  useCameraWatch();
+  const { cameraActive, microphoneActive, cameraHistory, microphoneHistory, microphoneState } =
+    useMediaDeviceStats();
+  const cameraState = camera.state;
+  const cameraStats = camera.stats;
 
   const [remoteIPAddress, setRemoteIPAddress] = useState<string | null>(null);
 
@@ -225,6 +245,165 @@ export default function ConnectionStatsSidebar() {
                   unit={m.connection_stats_unit_frames_per_second()}
                 />
               </div>
+
+              {/* USB camera */}
+              {cameraActive && (
+                <div className="space-y-3">
+                  <SettingsSectionHeader
+                    title={m.connection_stats_usb_camera()}
+                    description={m.connection_stats_usb_camera_description()}
+                  />
+                  <Metric
+                    title={m.connection_stats_camera_sent_fps()}
+                    description={m.connection_stats_camera_sent_fps_description()}
+                    stream={cameraHistory}
+                    metric="sentFps"
+                    map={x => ({
+                      date: x.date,
+                      metric: x.metric != null ? Math.round(x.metric) : null,
+                    })}
+                    domain={[0, 60]}
+                    unit={m.connection_stats_unit_frames_per_second()}
+                  />
+                  <Metric
+                    title={m.connection_stats_camera_usb_fps()}
+                    description={m.connection_stats_camera_usb_fps_description()}
+                    stream={cameraHistory}
+                    metric="usbFps"
+                    map={x => ({
+                      date: x.date,
+                      metric: x.metric != null ? Math.round(x.metric) : null,
+                    })}
+                    domain={[0, 60]}
+                    unit={m.connection_stats_unit_frames_per_second()}
+                  />
+                  <Metric
+                    title={m.connection_stats_camera_bitrate()}
+                    description={m.connection_stats_camera_bitrate_description()}
+                    stream={cameraHistory}
+                    metric="mbps"
+                    map={x => ({
+                      date: x.date,
+                      metric: x.metric != null ? Math.round(x.metric * 100) / 100 : null,
+                    })}
+                    domain={[0, 20]}
+                    unit={m.connection_stats_unit_megabits_per_second()}
+                  />
+                  <Metric
+                    title={m.connection_stats_camera_dropped()}
+                    description={m.connection_stats_camera_dropped_description()}
+                    stream={cameraHistory}
+                    metric="droppedPerSecond"
+                    domain={[0, 30]}
+                    unit={m.connection_stats_unit_frames_per_second()}
+                  />
+                  <div className="space-y-1">
+                    {cameraStats && (
+                      <>
+                        <StatRow
+                          label={m.connection_stats_row_source()}
+                          value={`${cameraStats.sourceWidth}x${cameraStats.sourceHeight} @ ${Math.round(cameraStats.sourceFps)} fps`}
+                        />
+                        <StatRow
+                          label={m.connection_stats_row_sent_size()}
+                          value={`${cameraStats.width}x${cameraStats.height}`}
+                        />
+                      </>
+                    )}
+                    {cameraState && (
+                      <>
+                        <StatRow label={m.connection_stats_row_codec()} value={cameraState.codec} />
+                        <StatRow
+                          label={m.connection_stats_row_transport()}
+                          value={cameraStats?.transport ?? cameraState.transport}
+                        />
+                        <StatRow
+                          label={m.connection_stats_row_usb_format()}
+                          value={
+                            cameraState.usb_size
+                              ? `${cameraState.usb_size} @ ${cameraState.usb_fps || "?"} fps`
+                              : m.connection_stats_row_auto()
+                          }
+                        />
+                        <StatRow
+                          label={m.connection_stats_row_total_frames()}
+                          value={String(cameraState.frames_written ?? 0)}
+                        />
+                        {cameraState.last_error && (
+                          <StatRow
+                            label={m.connection_stats_row_last_error()}
+                            value={cameraState.last_error}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* USB microphone */}
+              {microphoneActive && (
+                <div className="space-y-3">
+                  <SettingsSectionHeader
+                    title={m.connection_stats_usb_microphone()}
+                    description={m.connection_stats_usb_microphone_description()}
+                  />
+                  <Metric
+                    title={m.connection_stats_microphone_written()}
+                    description={m.connection_stats_microphone_written_description()}
+                    stream={microphoneHistory}
+                    metric="kiloSamplesPerSecond"
+                    map={x => ({
+                      date: x.date,
+                      metric: x.metric != null ? Math.round(x.metric * 10) / 10 : null,
+                    })}
+                    domain={[0, 60]}
+                    unit={m.connection_stats_unit_kilosamples_per_second()}
+                  />
+                  <Metric
+                    title={m.connection_stats_microphone_dropped()}
+                    description={m.connection_stats_microphone_dropped_description()}
+                    stream={microphoneHistory}
+                    metric="droppedPerSecond"
+                    domain={[0, 4800]}
+                    unit={m.connection_stats_unit_samples_per_second()}
+                  />
+                  <Metric
+                    title={m.connection_stats_microphone_level()}
+                    description={m.connection_stats_microphone_level_description()}
+                    stream={microphoneHistory}
+                    metric="level"
+                    domain={[0, 100]}
+                    unit={m.connection_stats_unit_percent()}
+                  />
+                  {microphoneState && (
+                    <div className="space-y-1">
+                      <StatRow
+                        label={m.connection_stats_row_sample_rate()}
+                        value={`${microphoneState.sampleRate} Hz`}
+                      />
+                      <StatRow
+                        label={m.connection_stats_row_channels()}
+                        value={String(microphoneState.channels)}
+                      />
+                      <StatRow
+                        label={m.connection_stats_row_device_ready()}
+                        value={
+                          microphoneState.deviceReady
+                            ? m.connection_stats_row_yes()
+                            : m.connection_stats_row_no()
+                        }
+                      />
+                      {microphoneState.lastError && (
+                        <StatRow
+                          label={m.connection_stats_row_last_error()}
+                          value={microphoneState.lastError}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

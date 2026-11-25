@@ -162,10 +162,13 @@ type ButtonPropsType = Pick<
   | "onMouseDown"
   | "onMouseUp"
   | "aria-label"
-  | "data-testid"
+  | "aria-expanded"
+  | "aria-controls"
+  | "aria-haspopup"
 > &
   React.ComponentProps<typeof ButtonContent> & {
     fetcher?: FetcherWithComponents<unknown>;
+    "data-testid"?: string;
   };
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -192,6 +195,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonPropsType>(
         name={props.name}
         value={props.value}
         aria-label={props["aria-label"]}
+        aria-expanded={props["aria-expanded"]}
+        aria-controls={props["aria-controls"]}
+        aria-haspopup={props["aria-haspopup"]}
         data-testid={props["data-testid"]}
       >
         <ButtonContent
