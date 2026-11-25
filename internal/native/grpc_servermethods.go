@@ -233,6 +233,29 @@ func (s *grpcServer) SwitchToScreenIfDifferent(ctx context.Context, req *pb.Swit
 	return &pb.Empty{}, nil
 }
 
+func (s *grpcServer) VideoSnapshot(ctx context.Context, req *pb.VideoSnapshotRequest) (*pb.VideoSnapshotResponse, error) {
+	shot, err := s.native.VideoSnapshot(SnapshotRequest{
+		X: int(req.X), Y: int(req.Y), Width: int(req.Width), Height: int(req.Height),
+		MaxWidth: int(req.MaxWidth), MaxHeight: int(req.MaxHeight),
+		Format: req.Format, Quality: int(req.Quality),
+	})
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+	return &pb.VideoSnapshotResponse{
+		Image:        shot.Image,
+		MimeType:     shot.MimeType,
+		ScreenWidth:  int32(shot.ScreenWidth),
+		ScreenHeight: int32(shot.ScreenHeight),
+		X:            int32(shot.X),
+		Y:            int32(shot.Y),
+		Width:        int32(shot.Width),
+		Height:       int32(shot.Height),
+		ImageWidth:   int32(shot.ImageWidth),
+		ImageHeight:  int32(shot.ImageHeight),
+	}, nil
+}
+
 func (s *grpcServer) DoNotUseThisIsForCrashTestingOnly(ctx context.Context, req *pb.Empty) (*pb.Empty, error) {
 	s.native.DoNotUseThisIsForCrashTestingOnly()
 	return &pb.Empty{}, nil

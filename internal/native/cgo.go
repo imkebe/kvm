@@ -1,5 +1,7 @@
 package native
 
+import "time"
+
 var (
 	_ func() error                       = setUpNativeHandlers
 	_ func()                             = crash
@@ -36,3 +38,5 @@ var (
 	_ func() (string, error)             = videoGetEDID
 	_ func(string) error                 = videoSetEDID
 )
+
+var _ func(time.Duration) (yuyvFrame, error) = videoSnapshot

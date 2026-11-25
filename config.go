@@ -160,6 +160,11 @@ type Config struct {
 	MqttConfig           *MQTTConfig          `json:"mqtt_config"`
 	AudioEnabled         bool                 `json:"audio_enabled"`
 	OSServices           *OSServicesConfig    `json:"os_services"`
+
+	// DeviceAPIEnabled turns on POST /api/rpc (device_api.go). Off by default.
+	DeviceAPIEnabled bool `json:"device_api_enabled"`
+	// APITokens open the device, terminal and metrics APIs (api_tokens.go).
+	APITokens        []APIToken        `json:"api_tokens,omitempty"`
 	USBNetworkConfig *USBNetworkConfig `json:"usb_network_config,omitempty"`
 	Netbird          *NetbirdConfig    `json:"netbird,omitempty"`
 }

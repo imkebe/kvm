@@ -20,6 +20,9 @@ import (
 #include "ctrl.h"
 #include <stdlib.h>
 
+// video.c: copies the next captured frame; see video.h.
+int video_snapshot(uint8_t **data, uint32_t *width, uint32_t *height, uint32_t *stride, int timeout_ms);
+
 typedef const char cchar_t;
 typedef const uint8_t cuint8_t;
 
@@ -181,6 +184,28 @@ func videoGetStreamingStatus() VideoStreamingStatus {
 	isStreaming := C.jetkvm_video_get_streaming_status()
 
 	return VideoStreamingStatus(isStreaming)
+}
+
+// videoSnapshot copies the next captured frame. It does not take cgoLock:
+// it waits for the capture thread and must not hold up the screen.
+func videoSnapshot(timeout time.Duration) (yuyvFrame, error) {
+	var data *C.uint8_t
+	var width, height, stride C.uint32_t
+	switch C.video_snapshot(&data, &width, &height, &stride, C.int(timeout.Milliseconds())) {
+	case 0:
+	case -1:
+		return yuyvFrame{}, errSnapshotTimeout
+	default:
+		return yuyvFrame{}, fmt.Errorf("the captured frame could not be copied")
+	}
+	defer C.free(unsafe.Pointer(data))
+	size := int(stride) * int(height)
+	return yuyvFrame{
+		data:   C.GoBytes(unsafe.Pointer(data), C.int(size)),
+		width:  int(width),
+		height: int(height),
+		stride: int(stride),
+	}, nil
 }
 
 func videoLogStatus() string {

@@ -2,7 +2,10 @@
 
 package native
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 var errNotSupported = errors.New("native: the C bridge is available only on linux/arm")
 
@@ -91,6 +94,10 @@ func videoInit(factor float64) error {
 }
 
 func videoShutdown() {}
+
+func videoSnapshot(timeout time.Duration) (yuyvFrame, error) {
+	return yuyvFrame{}, errNotSupported
+}
 
 func videoStart() {}
 

@@ -527,6 +527,82 @@ bool get_streaming_stopped()
     return stopped;
 }
 
+// A still of the HDMI input, for screenshots: video_snapshot() asks the
+// capture loop for its next frame, which copies it (YUYV) before encoding.
+static pthread_mutex_t snapshot_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t snapshot_cond = PTHREAD_COND_INITIALIZER;
+static int snapshot_waiters = 0;
+static uint8_t *snapshot_data = NULL;
+static uint32_t snapshot_width, snapshot_height, snapshot_stride;
+static uint64_t snapshot_generation = 0;
+
+static void snapshot_offer(MB_BLK blk, uint32_t width, uint32_t height, uint32_t stride)
+{
+    pthread_mutex_lock(&snapshot_mutex);
+    if (snapshot_waiters > 0 && snapshot_data == NULL)
+    {
+        size_t size = (size_t)stride * height;
+        uint8_t *src = blk != NULL ? RK_MPI_MB_Handle2VirAddr(blk) : NULL;
+        uint8_t *copy = src != NULL ? malloc(size) : NULL;
+        if (copy != NULL)
+        {
+            // The capture wrote the block by DMA; drop stale cache lines.
+            RK_MPI_SYS_MmzFlushCache(blk, RK_TRUE);
+            memcpy(copy, src, size);
+            snapshot_data = copy;
+            snapshot_width = width;
+            snapshot_height = height;
+            snapshot_stride = stride;
+        }
+        else
+        {
+            log_error("snapshot: cannot map or copy a %ux%u frame", width, height);
+        }
+        snapshot_generation++;
+        pthread_cond_broadcast(&snapshot_cond);
+    }
+    pthread_mutex_unlock(&snapshot_mutex);
+}
+
+int video_snapshot(uint8_t **data, uint32_t *width, uint32_t *height, uint32_t *stride, int timeout_ms)
+{
+    struct timespec deadline;
+    clock_gettime(CLOCK_REALTIME, &deadline);
+    deadline.tv_sec += timeout_ms / 1000;
+    deadline.tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L)
+    {
+        deadline.tv_sec++;
+        deadline.tv_nsec -= 1000000000L;
+    }
+
+    int result = -1;
+    pthread_mutex_lock(&snapshot_mutex);
+    snapshot_waiters++;
+    uint64_t start = snapshot_generation;
+    while (snapshot_generation == start)
+    {
+        if (pthread_cond_timedwait(&snapshot_cond, &snapshot_mutex, &deadline) == ETIMEDOUT)
+            break;
+    }
+    if (snapshot_generation != start)
+    {
+        result = -2;
+        if (snapshot_data != NULL)
+        {
+            *data = snapshot_data;
+            *width = snapshot_width;
+            *height = snapshot_height;
+            *stride = snapshot_stride;
+            snapshot_data = NULL;
+            result = 0;
+        }
+    }
+    snapshot_waiters--;
+    pthread_mutex_unlock(&snapshot_mutex);
+    return result;
+}
+
 void write_buffer_to_file(const uint8_t *buffer, size_t length, const char *filename)
 {
     FILE *file = fopen(filename, "wb");
@@ -580,6 +656,10 @@ void *run_video_stream(void *arg)
         log_info("capture colorimetry: colorspace=%u ycbcr_enc=%u quantization=%u xfer=%u",
                  fmt.fmt.pix_mp.colorspace, fmt.fmt.pix_mp.ycbcr_enc,
                  fmt.fmt.pix_mp.quantization, fmt.fmt.pix_mp.xfer_func);
+
+        uint32_t stride = fmt.fmt.pix_mp.plane_fmt[0].bytesperline;
+        if (stride < width * 2)
+            stride = width * 2;
 
         if (fmt.fmt.pix_mp.plane_fmt[0].sizeimage > input_buffer_size)
         {
@@ -743,6 +823,8 @@ void *run_video_stream(void *arg)
             log_trace("got frame, bytesused = %d", tmp_plane.bytesused);
             MB_BLK blk = RK_MPI_MMZ_Fd2Handle(tmp_plane.m.fd);
             assert(blk != RK_NULL);
+            if (buf.index < (uint32_t)input_buffer_count)
+                snapshot_offer(buffers[buf.index].mb_blk, width, height, stride);
             stFrame.stVFrame.pMbBlk = blk;
             stFrame.stVFrame.u32TimeRef = num;
             stFrame.stVFrame.u64PTS = get_us();
