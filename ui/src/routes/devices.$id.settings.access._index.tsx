@@ -14,6 +14,8 @@ import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { SettingsSectionHeader } from "@components/SettingsSectionHeader";
 import { NestedSettingsGroup } from "@components/NestedSettingsGroup";
 import { TextAreaWithLabel } from "@components/TextArea";
+import TailscaleCard from "@components/TailscaleCard";
+import NetbirdCard from "@components/NetbirdCard";
 import api from "@/api";
 import notifications from "@/notifications";
 import { DEVICE_API } from "@/ui.config";
@@ -71,6 +73,8 @@ export default function SettingsAccessIndexRoute() {
   const [selectedProvider, setSelectedProvider] = useState<string>("jetkvm");
   const [tlsMode, setTlsMode] = useState<string>("unknown");
   const tls = useCapability("tls");
+  const hasTailscale = useCapability("tailscale");
+  const hasNetbird = useCapability("netbird");
   const [tlsCert, setTlsCert] = useState<string>("");
   const [tlsKey, setTlsKey] = useState<string>("");
   const [sessionTimeout, setSessionTimeout] = useState<string>("0");
@@ -503,6 +507,20 @@ export default function SettingsAccessIndexRoute() {
           )}
         </div>
       </div>
+
+      {(hasTailscale || hasNetbird) && (
+        <>
+          <div className="h-px w-full bg-slate-800/10 dark:bg-slate-300/20" />
+          <div className="space-y-4">
+            <SettingsSectionHeader
+              title={m.access_vpn_title()}
+              description={m.access_vpn_description()}
+            />
+            {hasNetbird && <NetbirdCard />}
+            {hasTailscale && <TailscaleCard />}
+          </div>
+        </>
+      )}
     </div>
   );
 }

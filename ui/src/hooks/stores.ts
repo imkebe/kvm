@@ -959,6 +959,7 @@ export type Capability =
   | "local_loopback" // web UI can be limited to the loopback interface
   | "log_level" // default log level can be changed
   | "tailscale" // Tailscale client
+  | "netbird" // NetBird client the device installs and runs (Network page card)
   | "os_services" // USB link to the OS Services sender on the remote host (clipboard, file drop, shell)
   | "storage_download"; // device downloads an image from a URL into its storage
 
@@ -1062,6 +1063,65 @@ export interface TailscaleStatus {
   self?: TailscalePeer;
   health?: string[];
 }
+
+// getNetbirdState and the netbirdState event (netbird.go).
+export interface NetbirdStatus {
+  daemonStatus: string; // Idle, Connecting, Connected, NeedsLogin, LoginFailed, SessionExpired
+  version: string;
+  managementURL: string;
+  managementConnected: boolean;
+  managementError?: string;
+  signalConnected: boolean;
+  relaysTotal: number;
+  relaysAvailable: number;
+  peersTotal: number;
+  peersConnected: number;
+  ip?: string;
+  fqdn?: string;
+  kernelInterface: boolean;
+  networks?: string[];
+}
+
+export interface NetbirdState {
+  installed: boolean;
+  version?: string;
+  pinnedVersion: string;
+  install: { active: boolean; received: number; total: number; error?: string };
+  enabled: boolean;
+  daemonRunning: boolean;
+  managementURL: string;
+  joining: boolean;
+  authURL?: string;
+  status?: NetbirdStatus;
+  error?: string;
+  usbShare: boolean;
+  usbNetworkOn: boolean;
+  // The USB Ethernet target's own peer (USB Ethernet NetBird mode).
+  target: NetbirdTargetState;
+}
+export interface NetbirdTargetState {
+  enabled: boolean;
+  hostname?: string;
+  daemonRunning: boolean;
+  joining: boolean;
+  status?: NetbirdStatus;
+  error?: string;
+  // The target's NetBird address while the USB link hands it out.
+  address?: string;
+  // The NetBird zone the target resolves through the KVM, and its DNS server.
+  dnsZone?: string;
+  dnsServer?: string;
+}
+
+export interface NetbirdStore {
+  state: NetbirdState | null;
+  setState: (state: NetbirdState | null) => void;
+}
+
+export const useNetbirdStore = create<NetbirdStore>(set => ({
+  state: null,
+  setState: state => set({ state }),
+}));
 
 export interface NetworkState {
   interface_name?: string;

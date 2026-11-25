@@ -12,6 +12,7 @@ import Container from "@components/Container";
 import { LinkButton } from "@components/Button";
 import PeerConnectionStatusCard from "@components/PeerConnectionStatusCard";
 import USBStateStatus from "@components/USBStateStatus";
+import NetbirdStatusCard from "@components/NetbirdStatusCard";
 import { CLOUD_API, DEVICE_API } from "@/ui.config";
 import api from "@/api";
 import { isOnDevice } from "@/main";
@@ -96,6 +97,7 @@ export default function DashboardNavbar({
                     <div className="hidden w-[159px] md:block">
                       <USBStateStatus state={usbState} peerConnectionState={peerConnectionState} />
                     </div>
+                    {peerConnectionState === "connected" && <NetbirdStatusCard />}
                   </>
                 )}
                 {isLoggedIn ? (

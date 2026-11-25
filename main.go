@@ -107,6 +107,10 @@ func Main() {
 		logger.Error().Err(err).Msg("failed to initialize mDNS")
 	}
 
+	// NetBird after the network: the daemon needs an address to connect.
+	setProcTitle("initNetbird")
+	initNetbird()
+
 	setProcTitle("initPrometheus")
 	initPrometheus()
 	if err := setInitialVirtualMediaState(); err != nil {
