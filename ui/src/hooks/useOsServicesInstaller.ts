@@ -8,22 +8,22 @@ import {
   useMountMediaStore,
   useRTCStore,
   useStorageDownloadStore,
+  useVideoStore,
 } from "@hooks/stores";
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
 import notifications from "@/notifications";
-
-// The OS Services release bucket. The release step in the os-services
-// repository writes each release's offline ISO, which holds the installers
-// for Windows, macOS and Linux, to <version>/, and the newest stable one
-// also to jetkvm-os-services.iso.
-const OS_SERVICES_BUCKET_URL = "https://os-services.jetkvm.com";
+import { osServicesRepositoryFile } from "@/utils/osServicesRepository";
 
 // The offline ISO of a release, or of the newest stable release without a
-// version.
-function offlineInstallerUrl(version?: string) {
-  return version
-    ? `${OS_SERVICES_BUCKET_URL}/${version}/IP-KVM-OS-Services_${version}.iso`
-    : `${OS_SERVICES_BUCKET_URL}/jetkvm-os-services.iso`;
+// version, in the chosen OS Services repository. The release step in the
+// os-services repository writes each release's offline ISO, which holds the
+// installers for Windows, macOS and Linux, to <version>/, and the newest
+// stable one also to jetkvm-os-services.iso.
+function offlineInstallerUrl(repository: string | undefined, version?: string) {
+  return osServicesRepositoryFile(
+    repository,
+    version ? `${version}/IP-KVM-OS-Services_${version}.iso` : "jetkvm-os-services.iso",
+  );
 }
 
 // The offline ISO's file on the TF card, named as in the bucket.
@@ -171,8 +171,11 @@ export function useOsServicesInstaller() {
           );
           if (onCard) return null;
         }
-        const started = await call("downloadToStorage", {
-          url: offlineInstallerUrl(version),
+        const started = await call("startStorageDownload", {
+          url: offlineInstallerUrl(
+            useVideoStore.getState().osServicesSettings?.repository_url,
+            version,
+          ),
           filename,
         });
         if ("error" in started) return started.error.data || started.error.message;

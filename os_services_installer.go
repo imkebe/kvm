@@ -24,7 +24,11 @@ var builtinInstallerPath = filepath.Join(builtinInstallerFolder, installer.Filen
 const builtinInstallerMinBytes = 300 * 2048
 
 func builtinInstallerFile(version string) []byte {
+	// Another repository's disc opens that repository's downloads.
 	image := installer.Image(version)
+	if page := osServicesRepositoryPage(osServicesRepository()); page != "" {
+		image = installer.ImageTo(page)
+	}
 	if short := builtinInstallerMinBytes - len(image); short > 0 {
 		image = append(image, make([]byte, short)...)
 	}

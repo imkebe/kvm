@@ -46,6 +46,45 @@ type guestTerminal struct {
 	channel *webrtc.DataChannel
 	// Output sent to the browser and not yet credited to the sender.
 	pendingCredit uint32
+	// startup is the lines still to be typed (terminalStartupLines): the
+	// first once the shell has printed something, its prompt, each next one
+	// once the shell prints again after a pause (the prompt of a shell the
+	// line before started), or after guestTerminalStartupWait.
+	startup [][]byte
+	typed   int
+	typedAt time.Time
+}
+
+// guestTerminalStartupWait: a shell that prints no prompt gets the next
+// startup line after this long.
+const guestTerminalStartupWait = 3 * time.Second
+
+// guestTerminalEchoGap: output within this long of a typed line is its echo,
+// not the prompt that the next line waits for.
+const guestTerminalEchoGap = 400 * time.Millisecond
+
+// sendTerminalStartup types the terminal's next startup line. after is the
+// count of lines typed when the call was planned: a call that another one
+// overtook does nothing. waited: the fallback timer, which does not wait
+// for output.
+func (s *osServicesService) sendTerminalStartup(id uint32, t *guestTerminal, after int, waited bool) {
+	s.do(func(session *osservices.Session) {
+		if s.terminals[id] != t || len(t.startup) == 0 || t.typed != after {
+			return
+		}
+		if !waited && !t.typedAt.IsZero() && time.Since(t.typedAt) < guestTerminalEchoGap {
+			return
+		}
+		session.TerminalInput(id, t.startup[0])
+		t.startup = t.startup[1:]
+		t.typed++
+		t.typedAt = time.Now()
+		if len(t.startup) > 0 {
+			typed := t.typed
+			time.AfterFunc(guestTerminalStartupWait, func() { s.sendTerminalStartup(id, t, typed, true) })
+		}
+	})
+	s.link.Wake()
 }
 
 type guestDrop struct {
@@ -63,6 +102,10 @@ func handleGuestTerminalChannel(d *webrtc.DataChannel) {
 	var terminal *guestTerminal
 	d.OnOpen(func() {
 		var refusal string
+		var startup [][]byte
+		for _, line := range terminalStartupLines(s.config(), s.targetOSName()) {
+			startup = append(startup, []byte(line+"\r"))
+		}
 		s.do(func(session *osservices.Session) {
 			id, reason := session.TerminalOpen(0, 0)
 			if id == 0 {
@@ -70,10 +113,16 @@ func handleGuestTerminalChannel(d *webrtc.DataChannel) {
 				return
 			}
 			terminal = &guestTerminal{id: id, channel: d}
+			terminal.startup = startup
 			s.terminals[id] = terminal
 		})
 		if refusal != "" {
 			closeGuestTerminalChannel(d, refusal)
+			return
+		}
+		if startup != nil {
+			t := terminal
+			time.AfterFunc(guestTerminalStartupWait, func() { s.sendTerminalStartup(t.id, t, 0, true) })
 		}
 	})
 	d.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -136,6 +185,11 @@ func (s *osServicesService) TerminalOutput(id uint32, data []byte) bool {
 		}
 	}
 	t.pendingCredit += uint32(len(data))
+	if len(t.startup) > 0 && len(data) > 0 {
+		// The session lock is held here; the line goes from outside it.
+		typed := t.typed
+		go s.sendTerminalStartup(id, t, typed, false)
+	}
 	return true
 }
 

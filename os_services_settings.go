@@ -24,6 +24,23 @@ type OSServicesConfig struct {
 	DisplayMode      string `json:"display_mode"`
 	Adaptation       string `json:"adaptation,omitempty"`
 	ClipboardEnabled bool   `json:"clipboard_enabled"`
+	// TerminalShell is the syntax of the browser terminal's shell: "auto"
+	// (or empty) works it out (chooseTerminalShell), or one of the kinds in
+	// os_services_terminal_shell.go. TerminalShellCommand is typed first into
+	// each new browser terminal, to start another shell (e.g. "pwsh").
+	TerminalShell        string `json:"terminal_shell,omitempty"`
+	TerminalShellCommand string `json:"terminal_shell_command,omitempty"`
+	// A terminal multiplexer for the browser terminal: while
+	// TerminalMuxEnabled is set, each new browser terminal gets
+	// "restore %OR% start" typed once the shell is up
+	// (terminalStartupLines): the restore command reattaches to the
+	// multiplexer's session, and when that fails the start command creates
+	// it. So ending or losing the browser terminal leaves the programs
+	// running and the next one brings them back. Both may hold the macros of
+	// expandTerminalMacros. Terminal API shells (MCP) never get it.
+	TerminalMuxEnabled bool   `json:"terminal_mux_enabled"`
+	TerminalMuxStart   string `json:"terminal_mux_start,omitempty"`
+	TerminalMuxRestore string `json:"terminal_mux_restore,omitempty"`
 	// HostInfoEnabled lets the program on the target computer report its
 	// system information. Off until switched on.
 	HostInfoEnabled bool `json:"host_info_enabled"`
@@ -33,6 +50,10 @@ type OSServicesConfig struct {
 	// had one.
 	LastSenderVersion string `json:"last_sender_version,omitempty"`
 	LastSenderAt      string `json:"last_sender_at,omitempty"`
+	// RepositoryURL is where the KVM and the browser fetch OS Services
+	// releases: the offline installer disc, the update index and packages.
+	// Empty is JetKVM's (osServicesBucketURL). See os_services_repository.go.
+	RepositoryURL string `json:"repository_url,omitempty"`
 }
 
 type osServicesResolution struct {
@@ -51,7 +72,22 @@ const (
 	osServicesDefaultResolution = "2560x1440"
 	// osServicesAdaptationMax bounds the adaptation text.
 	osServicesAdaptationMax = 39
+	// osServicesTerminalCommandMax bounds each typed command.
+	osServicesTerminalCommandMax = 256
 )
+
+// validTerminalCommand: one line of printable text, typed into a shell.
+func validTerminalCommand(text string) bool {
+	if len(text) > osServicesTerminalCommandMax {
+		return false
+	}
+	for _, r := range text {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
 
 func defaultOSServicesConfig() *OSServicesConfig {
 	return &OSServicesConfig{
@@ -109,6 +145,7 @@ func mergeOSServicesConfig(base OSServicesConfig, request map[string]any) (OSSer
 	}{
 		{"enabled", &merged.Enabled},
 		{"terminal_enabled", &merged.TerminalEnabled},
+		{"terminal_mux_enabled", &merged.TerminalMuxEnabled},
 		{"files_enabled", &merged.FilesEnabled},
 		{"video_enabled", &merged.VideoEnabled},
 		{"clipboard_enabled", &merged.ClipboardEnabled},
@@ -130,6 +167,34 @@ func mergeOSServicesConfig(base OSServicesConfig, request map[string]any) (OSSer
 		}
 		merged.CaptureDisplay = v
 	}
+	commands := []struct {
+		name  string
+		value *string
+	}{
+		{"terminal_mux_start", &merged.TerminalMuxStart},
+		{"terminal_mux_restore", &merged.TerminalMuxRestore},
+		{"terminal_shell_command", &merged.TerminalShellCommand},
+	}
+	for _, c := range commands {
+		if value, ok := field(c.name); ok {
+			v, isString := value.(string)
+			if !isString {
+				return base, errors.New(c.name + " must be a string")
+			}
+			v = strings.TrimSpace(v)
+			if !validTerminalCommand(v) {
+				return base, errors.New("a terminal command must be one line of at most 256 characters")
+			}
+			*c.value = v
+		}
+	}
+	if value, ok := field("terminal_shell"); ok {
+		v, isString := value.(string)
+		if !isString || !validTerminalShell(v) {
+			return base, errors.New("unsupported terminal shell")
+		}
+		merged.TerminalShell = v
+	}
 	if value, ok := field("resolution"); ok {
 		v, _ := value.(string)
 		if _, found := osServicesResolutionSize(v); !found {
@@ -143,6 +208,21 @@ func mergeOSServicesConfig(base OSServicesConfig, request map[string]any) (OSSer
 			return base, errors.New("unsupported OS Services display mode")
 		}
 		merged.DisplayMode = v
+	}
+	if value, ok := request["repository_url"]; ok {
+		v, isString := value.(string)
+		if value != nil && !isString {
+			return base, errors.New("repository_url must be a string")
+		}
+		// Only a changed URL is checked: the page sends the saved one back with
+		// every other setting, and it may predate the current rule.
+		if v != base.RepositoryURL {
+			repository, err := normalizeOSServicesRepository(v)
+			if err != nil {
+				return base, err
+			}
+			merged.RepositoryURL = repository
+		}
 	}
 	if value, ok := field("adaptation"); ok {
 		v, isString := value.(string)

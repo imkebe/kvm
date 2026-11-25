@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Navigate } from "react-router";
 import { useDebounceValue } from "usehooks-ts";
 
-import { LuCopy, LuTriangleAlert } from "react-icons/lu";
+import { LuBookOpen, LuCopy, LuTriangleAlert } from "react-icons/lu";
 
 import { Checkbox } from "@components/Checkbox";
 import Card, { GridCard } from "@components/Card";
 import { Button } from "@components/Button";
 import { guestUpdateDescription, useGuestUpdateStart } from "@components/GuestUpdateStatusCard";
+import OsServicesRepositorySetting from "@components/OsServicesRepositorySetting";
+import OsServicesTerminalMuxSetting from "@components/OsServicesTerminalMuxSetting";
+import OsServicesTerminalShellSetting, {
+  TerminalShellChoice,
+} from "@components/OsServicesTerminalShellSetting";
+import OsServicesGuideDialog from "@components/OsServicesGuideDialog";
 import OsServicesInstallerButton from "@components/OsServicesInstallerButton";
 import { SelectMenuBasic } from "@components/SelectMenuBasic";
 import { SettingsItem } from "@components/SettingsItem";
@@ -142,6 +148,7 @@ function OsServicesSettingsPage() {
   // a new live mode, a new request, or a repeat of the same request starts
   // a new wait, and an expired key from an earlier mismatch never matches.
   const [resolutionRequests, setResolutionRequests] = useState(0);
+  const [guideOpen, setGuideOpen] = useState(false);
   const driftKey = mismatched
     ? `${liveResolution}/${settings.resolution}/${resolutionRequests}`
     : null;
@@ -153,6 +160,22 @@ function OsServicesSettingsPage() {
   useEffect(() => {
     if (osServicesSettings) setSettings(osServicesSettings);
   }, [osServicesSettings]);
+
+  // The shell the KVM writes the typed commands for: asked again when the
+  // shell settings change or a sender (and with it host info) comes.
+  const [shellChoice, setShellChoice] = useState<TerminalShellChoice | null>(null);
+  useEffect(() => {
+    if (!settings?.terminal_enabled) return;
+    void send("getOsServicesTerminalShell", {}, (response: JsonRpcResponse) => {
+      if (!("error" in response)) setShellChoice(response.result as TerminalShellChoice);
+    });
+  }, [
+    send,
+    settings?.terminal_enabled,
+    settings?.terminal_shell,
+    settings?.terminal_shell_command,
+    osServices.connected,
+  ]);
 
   const update = useCallback(
     (next: OsServicesSettings) => {
@@ -191,6 +214,33 @@ function OsServicesSettingsPage() {
           </p>
         </div>
       </Card>
+
+      <SettingsItem
+        title={m.os_services_guide_title()}
+        description={m.os_services_guide_item_description()}
+      >
+        <Button
+          size="SM"
+          theme="light"
+          LeadingIcon={LuBookOpen}
+          text={m.os_services_guide_open()}
+          onClick={() => setGuideOpen(true)}
+          data-testid="os-services-guide-open"
+        />
+      </SettingsItem>
+      {settings && (
+        <OsServicesRepositorySetting
+          repository={settings.repository_url}
+          disabled={loading}
+          onSave={repository => update({ ...settings, repository_url: repository })}
+        />
+      )}
+      <OsServicesGuideDialog
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        version={guestUpdate?.version}
+        fingerprint={osServices.fingerprint}
+      />
 
       {!settings ? (
         <SettingsItem
@@ -490,18 +540,36 @@ function OsServicesSettingsPage() {
                         ],
                       ] as const
                     ).map(([field, title, description]) => (
-                      <SettingsItem
-                        key={field}
-                        title={title}
-                        description={description}
-                        loading={loading}
-                      >
-                        <Checkbox
-                          checked={settings[field]}
-                          disabled={loading}
-                          onChange={event => update({ ...settings, [field]: event.target.checked })}
-                        />
-                      </SettingsItem>
+                      <Fragment key={field}>
+                        <SettingsItem title={title} description={description} loading={loading}>
+                          <Checkbox
+                            checked={!!settings[field]}
+                            disabled={loading}
+                            onChange={event =>
+                              update({ ...settings, [field]: event.target.checked })
+                            }
+                          />
+                        </SettingsItem>
+                        {field === "terminal_enabled" && settings.terminal_enabled && (
+                          <>
+                            <OsServicesTerminalShellSetting
+                              shell={settings.terminal_shell}
+                              command={settings.terminal_shell_command}
+                              choice={shellChoice}
+                              disabled={loading}
+                              onSave={changes => update({ ...settings, ...changes })}
+                            />
+                            <OsServicesTerminalMuxSetting
+                              enabled={settings.terminal_mux_enabled ?? false}
+                              start={settings.terminal_mux_start}
+                              restore={settings.terminal_mux_restore}
+                              choice={shellChoice}
+                              disabled={loading}
+                              onSave={changes => update({ ...settings, ...changes })}
+                            />
+                          </>
+                        )}
+                      </Fragment>
                     ))}
                   </div>
                 </>

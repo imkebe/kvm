@@ -405,6 +405,15 @@ export interface OsServicesSettings {
   last_sender_at?: string;
   adaptation?: string;
   terminal_enabled: boolean;
+  // The browser terminal's shell syntax ("auto" or absent: detected) and a
+  // command typed first to start another shell.
+  terminal_shell?: string;
+  terminal_shell_command?: string;
+  // Terminal multiplexer of the browser terminal: the KVM types
+  // "restore %OR% start" into each new one while enabled.
+  terminal_mux_enabled?: boolean;
+  terminal_mux_start?: string;
+  terminal_mux_restore?: string;
   files_enabled: boolean;
   capture_display: string;
   video_enabled: boolean;
@@ -413,6 +422,8 @@ export interface OsServicesSettings {
   clipboard_enabled: boolean;
   // Show the target computer's system information in the UI; absent means off.
   host_info_enabled?: boolean;
+  // Where OS Services releases come from; absent for JetKVM's server.
+  repository_url?: string;
 }
 
 export interface OsServicesSettingsEvent {
