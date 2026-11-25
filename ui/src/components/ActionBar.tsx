@@ -34,6 +34,7 @@ import PasteModal from "@components/popovers/PasteModal";
 import WakeOnLanModal from "@components/popovers/WakeOnLan/Index";
 import MountPopopover from "@components/popovers/MountPopover";
 import ExtensionPopover from "@components/popovers/ExtensionPopover";
+import CaptureButtons from "@components/CaptureButtons";
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
 import { m } from "@localizations/messages.js";
 
@@ -368,6 +369,8 @@ export default function Actionbar({
               />
             </div>
           )}
+
+          <CaptureButtons />
 
           <div className="hidden items-center gap-x-2 lg:flex">
             <div className="h-4 w-px bg-slate-300 dark:bg-slate-600" />
