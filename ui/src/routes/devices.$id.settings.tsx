@@ -16,6 +16,10 @@ import {
   LuNetwork,
   LuRadio,
   LuMonitor,
+  LuChevronDown,
+  LuChevronRight,
+  LuUsb,
+  LuMonitorSmartphone,
 } from "react-icons/lu";
 
 import { cx } from "@/cva.config";
@@ -38,6 +42,15 @@ export default function SettingsRoute() {
   const { isFailsafeMode, reason: failsafeReason } = useFailsafeModeStore();
   const isNativeDisabled = isFailsafeMode && failsafeReason === "native";
   const osServices = useCapability("os_services");
+  const inHardware = /\/settings\/hardware(\/|$)/.test(location.pathname);
+  const [hardwareOpen, setHardwareOpen] = useState(inHardware);
+  useEffect(() => {
+    if (inHardware) setHardwareOpen(true);
+  }, [inHardware]);
+  const hardwarePages = [
+    { to: "hardware", end: true, icon: LuMonitorSmartphone, label: m.settings_hardware_display() },
+    { to: "hardware/usb", end: false, icon: LuUsb, label: m.settings_hardware_usb() },
+  ];
 
   // Handle scroll position to show/hide gradients
   const handleScroll = () => {
@@ -200,20 +213,63 @@ export default function SettingsRoute() {
                     "cursor-not-allowed opacity-50": isNativeDisabled,
                   })}
                 >
-                  <NavLink
-                    to="hardware"
-                    className={({ isActive }) =>
-                      cx(isActive ? "active" : "", {
-                        "pointer-events-none": isNativeDisabled,
-                      })
-                    }
-                  >
-                    <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:hover:bg-slate-700 dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
-                      <LuCpu className="h-4 w-4 shrink-0" />
-                      <h1>{m.settings_hardware()}</h1>
-                    </div>
-                  </NavLink>
+                  <div className="flex items-center">
+                    <NavLink
+                      to="hardware"
+                      end={false}
+                      onClick={() => setHardwareOpen(true)}
+                      className={({ isActive }) =>
+                        cx("min-w-0 flex-1", isActive ? "active" : "", {
+                          "pointer-events-none": isNativeDisabled,
+                        })
+                      }
+                    >
+                      <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:hover:bg-slate-700 dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
+                        <LuCpu className="h-4 w-4 shrink-0" />
+                        <h1>{m.settings_hardware()}</h1>
+                      </div>
+                    </NavLink>
+                    <button
+                      type="button"
+                      aria-expanded={hardwareOpen}
+                      aria-label={m.settings_hardware_toggle()}
+                      disabled={isNativeDisabled}
+                      onClick={() => setHardwareOpen(open => !open)}
+                      className="rounded-md p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700"
+                    >
+                      {hardwareOpen ? (
+                        <LuChevronDown className="h-4 w-4" />
+                      ) : (
+                        <LuChevronRight className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
+                {hardwareOpen &&
+                  hardwarePages.map(page => (
+                    <div
+                      key={page.to}
+                      className={cx(
+                        "shrink-0 md:ml-4 md:border-l md:border-slate-800/10 md:pl-1 dark:md:border-slate-300/20",
+                        {
+                          "cursor-not-allowed opacity-50": isNativeDisabled,
+                        },
+                      )}
+                    >
+                      <NavLink
+                        to={page.to}
+                        end={page.end}
+                        className={({ isActive }) =>
+                          cx(isActive ? "active" : "", { "pointer-events-none": isNativeDisabled })
+                        }
+                      >
+                        <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2 text-[13px] transition-colors hover:bg-slate-100 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:hover:bg-slate-700 dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">
+                          <page.icon className="h-3.5 w-3.5 shrink-0" />
+                          <span>{page.label}</span>
+                        </div>
+                      </NavLink>
+                    </div>
+                  ))}
                 <div className="shrink-0">
                   <NavLink to="access" className={({ isActive }) => (isActive ? "active" : "")}>
                     <div className="flex items-center gap-x-2 rounded-md px-2.5 py-2.5 text-sm transition-colors hover:bg-slate-100 in-[.active]:bg-blue-50 in-[.active]:text-blue-700! md:in-[.active]:bg-transparent dark:hover:bg-slate-700 dark:in-[.active]:bg-blue-900 dark:in-[.active]:text-blue-200! dark:md:in-[.active]:bg-transparent">

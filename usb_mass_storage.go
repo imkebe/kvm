@@ -83,7 +83,27 @@ func setMassStorageMode(cdrom bool) error {
 	return nil
 }
 
+// errMassStorageOff is returned by every mount while the USB mass storage
+// function is off: its LUN does not exist then, and writing to it fails with
+// "no such file or directory".
+var errMassStorageOff = errors.New("USB mass storage is off. Turn it on in Settings > Hardware > USB, then mount again")
+
+func massStorageEnabled() bool {
+	return config != nil && config.UsbDevices != nil && config.UsbDevices.MassStorage
+}
+
+func requireMassStorage() error {
+	if !massStorageEnabled() {
+		return errMassStorageOff
+	}
+	return nil
+}
+
 func ejectMassStorageImage() error {
+	// Without the function there is no LUN and nothing to eject.
+	if !massStorageEnabled() {
+		return nil
+	}
 	err := gadget.SetMassStorageImage("")
 	if !errors.Is(err, syscall.EBUSY) {
 		return err
@@ -101,6 +121,9 @@ func ejectMassStorageImage() error {
 }
 
 func mountImage(imagePath string) error {
+	if err := requireMassStorage(); err != nil {
+		return err
+	}
 	err := ejectMassStorageImage()
 	if err != nil {
 		return fmt.Errorf("remove mass storage image error: %w", err)
@@ -429,6 +452,9 @@ func prepareHTTPMount(url string, mode VirtualMediaMode) error {
 	httpRangeReader = httpreadat.New(url)
 	logger.Info().Str("url", url).Int64("size", urlInfo.Size).Msg("using remote url")
 
+	if err := requireMassStorage(); err != nil {
+		return err
+	}
 	// f_mass_storage refuses cdrom and ro while the LUN holds an open medium,
 	// and a refused write aborts the whole gadget transaction. Eject first; on
 	// an already empty LUN this is a no-op.
@@ -491,6 +517,9 @@ func prepareStorageMount(filename string, mode VirtualMediaMode) error {
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
 
+	if err := requireMassStorage(); err != nil {
+		return err
+	}
 	// Same as in prepareHTTPMount: the mode cannot be changed against an open
 	// medium, and a refused write aborts the gadget transaction.
 	if err := ejectMassStorageImage(); err != nil {

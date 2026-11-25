@@ -60,6 +60,9 @@ func prepareBuiltinInstallerMount() error {
 	if err := writeBuiltinInstaller(image); err != nil {
 		return err
 	}
+	if err := requireMassStorage(); err != nil {
+		return err
+	}
 	// The mode cannot change while the LUN holds an open medium.
 	if err := ejectMassStorageImage(); err != nil {
 		return fmt.Errorf("failed to eject before setting mass storage mode: %w", err)
