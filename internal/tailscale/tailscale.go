@@ -23,6 +23,11 @@ type Status struct {
 	ControlURL   string   `json:"controlURL,omitempty"`
 	Self         *Peer    `json:"self,omitempty"`
 	Health       []string `json:"health,omitempty"`
+
+	// For the USB Ethernet Tailscale mode: TUN says tailscaled has a kernel
+	// interface; PeerRoutes are the subnet routes other peers serve.
+	TUN        bool     `json:"-"`
+	PeerRoutes []string `json:"-"`
 }
 
 type Peer struct {
@@ -38,6 +43,11 @@ type rawStatus struct {
 	AuthURL      string   `json:"AuthURL"`
 	Self         *rawPeer `json:"Self"`
 	Health       []string `json:"Health"`
+
+	TUN  bool `json:"TUN"`
+	Peer map[string]struct {
+		PrimaryRoutes []string `json:"PrimaryRoutes"`
+	} `json:"Peer"`
 }
 
 type rawPeer struct {
@@ -152,6 +162,10 @@ func ParseStatus(data []byte, controlURL string) (*Status, error) {
 		AuthURL:      raw.AuthURL,
 		ControlURL:   EffectiveControlURL(controlURL),
 		Health:       raw.Health,
+		TUN:          raw.TUN,
+	}
+	for _, peer := range raw.Peer {
+		status.PeerRoutes = append(status.PeerRoutes, peer.PrimaryRoutes...)
 	}
 
 	if raw.Self != nil {

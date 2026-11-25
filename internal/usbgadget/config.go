@@ -98,6 +98,10 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 	"video_h264_header":           h264VideoConfig(videoStreamingHeaderConfig),
 	"video_h264_class_fs":         h264VideoConfig(videoStreamingClassFSConfig),
 	"video_h264_links":            h264VideoConfig(videoH264LinksConfig),
+	// virtual USB network
+	"network_ncm":   networkConfig("ncm", 6000),
+	"network_ecm":   networkConfig("ecm", 6001),
+	"network_rndis": networkConfig("rndis", 6002),
 }
 
 func init() {
@@ -149,6 +153,12 @@ func (u *UsbGadget) isBaseGadgetConfigItemEnabled(itemKey string) bool {
 		"video_streaming_class_fs",
 		"video_links":
 		return u.enabledDevices.Video && u.customConfig.VideoCodec != "h264"
+	case "network_ncm", "network_ecm", "network_rndis":
+		function := u.customConfig.NetworkFunction
+		if function == "" {
+			function = "ncm"
+		}
+		return u.enabledDevices.Network && itemKey == "network_"+function
 	case "audio":
 		return u.enabledDevices.Audio || u.enabledDevices.Microphone
 	default:
@@ -209,6 +219,7 @@ func (u *UsbGadget) loadGadgetConfig() {
 	u.syncAudioAttrs()
 	u.syncVideoAttrs()
 	u.syncFunctionNames()
+	u.syncNetworkAddresses()
 	if u.customConfig.isEmpty {
 		u.log.Trace().Msg("using default gadget config")
 		return

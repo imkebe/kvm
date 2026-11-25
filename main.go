@@ -69,6 +69,7 @@ func Main() {
 	initUsbGadget()
 	initVirtualVideo()
 	initVirtualAudio()
+	initUSBNetwork()
 
 	setProcTitle("initNative")
 	initNative(systemVersionLocal, appVersionLocal)
@@ -110,6 +111,7 @@ func Main() {
 	// NetBird after the network: the daemon needs an address to connect.
 	setProcTitle("initNetbird")
 	initNetbird()
+	initTailscaleShare()
 
 	setProcTitle("initPrometheus")
 	initPrometheus()

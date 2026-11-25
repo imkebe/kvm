@@ -20,6 +20,7 @@ import {
   LuChevronRight,
   LuUsb,
   LuCamera,
+  LuEthernetPort,
   LuMic,
   LuMonitorSmartphone,
 } from "react-icons/lu";
@@ -53,6 +54,12 @@ export default function SettingsRoute() {
     { to: "hardware", end: true, icon: LuMonitorSmartphone, label: m.settings_hardware_display() },
     { to: "hardware/usb", end: false, icon: LuUsb, label: m.settings_hardware_usb() },
     { to: "hardware/camera", end: false, icon: LuCamera, label: m.settings_hardware_camera() },
+    {
+      to: "hardware/network",
+      end: false,
+      icon: LuEthernetPort,
+      label: m.settings_hardware_network(),
+    },
     { to: "hardware/microphone", end: false, icon: LuMic, label: m.settings_hardware_microphone() },
   ];
 

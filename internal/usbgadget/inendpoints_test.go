@@ -90,6 +90,50 @@ func TestMicrophoneGetsSpareBeforeAudio(t *testing.T) {
 	}
 }
 
+func TestEveryLayoutKeepsDataOffUnreliableEndpoints(t *testing.T) {
+	for mask := 0; mask < 1<<6; mask++ {
+		d := allDefault
+		d.Microphone = mask&1 != 0
+		d.Audio = mask&2 != 0
+		d.SerialConsole = mask&4 != 0
+		d.Video = mask&8 != 0
+		d.Network = mask&16 != 0
+		d.MassStorage = mask&32 == 0
+		for _, codec := range []string{"", "h264"} {
+			for _, netFn := range []string{"ncm", "ecm", "rndis"} {
+				u := planGadget(d, true)
+				u.customConfig.VideoCodec = codec
+				u.customConfig.NetworkFunction = netFn
+				dataEndpointsAreReliable(t, u)
+			}
+		}
+	}
+}
+
+func TestNoSparesWithoutKernelSupport(t *testing.T) {
+	d := allDefault
+	d.Microphone = true
+	d.Video = true
+	d.Network = true
+	u := planGadget(d, false)
+	if plan := u.plannedSpares(); len(plan) != 0 {
+		t.Fatalf("spares planned without kernel support: %v", plan)
+	}
+}
+
+func TestCameraAndNetworkNeedSpareBeforeNetwork(t *testing.T) {
+	// HID x4, mass storage 5, UVC control 6 (aux) and streaming 7, then the
+	// network's bulk IN would be 8.
+	d := allDefault
+	d.Video = true
+	d.Network = true
+	u := planGadget(d, true)
+	if got := u.plannedSpares()[5990]; got != 1 {
+		t.Fatalf("spares before network = %d, want 1; numbers %v", got, inNumbers(u))
+	}
+	dataEndpointsAreReliable(t, u)
+}
+
 func TestAudioAttrsFollowDevices(t *testing.T) {
 	cases := []struct {
 		devices      Devices
@@ -153,6 +197,10 @@ func TestINEndpointBudget(t *testing.T) {
 	if err := u.CheckINEndpoints(devices, true); err != nil {
 		t.Fatalf("camera and the external function: %v", err)
 	}
+	devices.Network = true
+	if err := u.CheckINEndpoints(devices, true); err == nil {
+		t.Fatal("camera, network and the external function fit in nine IN endpoints")
+	}
 }
 
 // The usage split adds up to the count the gadget checks.
@@ -170,6 +218,7 @@ func TestINEndpointUsageMatchesNeeded(t *testing.T) {
 		defaultUsbGadgetDevices,
 		{Keyboard: true},
 		{Keyboard: true, AbsoluteMouse: true, RelativeMouse: true, Video: true, Microphone: true, Audio: true},
+		{Keyboard: true, AbsoluteMouse: true, RelativeMouse: true, Network: true, SerialConsole: true},
 	} {
 		for _, external := range []bool{false, true} {
 			usage := u.INEndpointUsage(devices, external)
