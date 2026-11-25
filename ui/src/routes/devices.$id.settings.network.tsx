@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FieldValues, FormProvider, useForm } from "react-hook-form";
-import { LuCopy, LuEthernetPort } from "react-icons/lu";
+import { LuCopy, LuEthernetPort, LuRadar } from "react-icons/lu";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import validator from "validator";
@@ -16,8 +16,10 @@ import {
   useRTCStore,
 } from "@hooks/stores";
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
+import { useNetworkDiscovery } from "@hooks/useNetworkDiscovery";
 import AutoHeight from "@components/AutoHeight";
 import { Button } from "@components/Button";
+import { Checkbox } from "@components/Checkbox";
 import { ConfirmDialog } from "@components/ConfirmDialog";
 import CustomTimeSyncCard from "@components/CustomTimeSyncCard";
 import DhcpLeaseCard from "@components/DhcpLeaseCard";
@@ -25,6 +27,7 @@ import EmptyCard from "@components/EmptyCard";
 import { GridCard } from "@components/Card";
 import InputField, { InputFieldWithLabel } from "@components/InputField";
 import Ipv6NetworkCard from "@components/Ipv6NetworkCard";
+import NetworkDiscoveryDialog from "@components/NetworkDiscoveryDialog";
 import { SelectMenuBasic } from "@/components/SelectMenuBasic";
 import { SettingsItem } from "@components/SettingsItem";
 import { SettingsPageHeader } from "@/components/SettingsPageheader";
@@ -108,6 +111,11 @@ export default function SettingsNetworkRoute() {
   // Confirm dialog
   const [isCloudAdopted, setIsCloudAdopted] = useState(false);
   const [showRenewLeaseConfirm, setShowRenewLeaseConfirm] = useState(false);
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const { checkAddress } = useNetworkDiscovery();
+  // Addresses another device answers for that the user was warned about:
+  // saving again with the same address goes ahead.
+  const acknowledgedInUse = useRef(new Set<string>());
 
   // We use this to determine whether the settings have changed
   const initialSettingsRef = useRef<NetworkSettings | null>(null);
@@ -140,6 +148,14 @@ export default function SettingsNetworkRoute() {
           netmask: settings.ipv4_static?.netmask || state.dhcp_lease?.netmask || "",
           gateway: settings.ipv4_static?.gateway || state.dhcp_lease?.routers?.[0] || "",
           dns: settings.ipv4_static?.dns || state.dhcp_lease?.dns_servers || [],
+        },
+        ipv4_fallback_enabled: !!settings.ipv4_fallback_enabled,
+        ipv4_fallback_timeout: settings.ipv4_fallback_timeout || 30,
+        ipv4_fallback: {
+          address: settings.ipv4_fallback?.address || "",
+          netmask: settings.ipv4_fallback?.netmask || "",
+          gateway: settings.ipv4_fallback?.gateway || "",
+          dns: settings.ipv4_fallback?.dns || [],
         },
         ipv6_static: {
           prefix: settings.ipv6_static?.prefix || state.ipv6_addresses?.[0]?.prefix || "",
@@ -197,7 +213,8 @@ export default function SettingsNetworkRoute() {
     [customDomain],
   );
 
-  const { register, handleSubmit, watch, formState, reset, getValues, setValue } = formMethods;
+  const { register, handleSubmit, watch, formState, reset, getValues, setValue, setError } =
+    formMethods;
   const reloadSettings = useCallback(
     () =>
       fetchNetworkData().then(
@@ -232,6 +249,25 @@ export default function SettingsNetworkRoute() {
         settings.ipv4_static.dns = settings.ipv4_static.dns.filter(Boolean);
       }
 
+      // The fallback, like the static settings, takes an address in CIDR
+      // notation. Without an address and switched off it is not sent: the
+      // KVM requires the address of a fallback it receives.
+      const fallback = settings.ipv4_fallback;
+      if (fallback?.address?.includes("/")) {
+        const [address, bits] = fallback.address.split("/");
+        const cidrNotation = Number.parseInt(bits);
+        if (Number.isNaN(cidrNotation) || cidrNotation < 0 || cidrNotation > 32) {
+          return notifications.error(m.network_ipv4_invalid_cidr());
+        }
+        fallback.netmask = netMaskFromCidr4(cidrNotation);
+        fallback.address = address;
+      }
+      if (fallback) fallback.dns = fallback.dns.filter(Boolean);
+      if (fallback && !fallback.address && !settings.ipv4_fallback_enabled) {
+        delete settings.ipv4_fallback;
+      }
+      settings.ipv4_fallback_timeout = Number(settings.ipv4_fallback_timeout) || 30;
+
       send("setNetworkSettings", { settings }, async resp => {
         if ("error" in resp) {
           notifications.error(
@@ -261,6 +297,48 @@ export default function SettingsNetworkRoute() {
     async (data: FieldValues) => {
       const settings = prepareSettings(data);
       const dirty = formState.dirtyFields;
+
+      // A new static or fallback address is checked first: if another
+      // device answers ARP for it, the field shows that, and saving again
+      // with the same address goes ahead.
+      const addressOf = (value?: string) => (value ?? "").split("/")[0];
+      const checks: { field: "ipv4_static.address" | "ipv4_fallback.address"; address: string }[] =
+        [];
+      if (settings.ipv4_mode === "static" && (dirty.ipv4_mode || dirty.ipv4_static?.address)) {
+        checks.push({
+          field: "ipv4_static.address",
+          address: addressOf(settings.ipv4_static?.address),
+        });
+      }
+      if (
+        settings.ipv4_mode === "dhcp" &&
+        settings.ipv4_fallback_enabled &&
+        (dirty.ipv4_fallback_enabled || dirty.ipv4_fallback?.address)
+      ) {
+        checks.push({
+          field: "ipv4_fallback.address",
+          address: addressOf(settings.ipv4_fallback?.address),
+        });
+      }
+      for (const check of checks) {
+        if (!validator.isIP(check.address, 4) || acknowledgedInUse.current.has(check.address)) {
+          continue;
+        }
+        try {
+          const result = await checkAddress(check.address);
+          if (result.in_use) {
+            acknowledgedInUse.current.add(check.address);
+            setError(check.field, {
+              type: "in_use",
+              message: m.network_address_in_use_save({ mac: result.mac ?? "" }),
+            });
+            return;
+          }
+        } catch {
+          // The check could not run, for example during another scan:
+          // the address is not known to be taken.
+        }
+      }
 
       // Build list of critical changes for display
       const changes: { label: string; from: string; to: string }[] = [];
@@ -369,7 +447,7 @@ export default function SettingsNetworkRoute() {
       setCriticalChanges(changes);
       setShowCriticalSettingsConfirm(true);
     },
-    [prepareSettings, formState.dirtyFields, onSubmit],
+    [prepareSettings, formState.dirtyFields, onSubmit, checkAddress, setError],
   );
 
   const dhcpClient = watch("dhcp_client");
@@ -377,6 +455,7 @@ export default function SettingsNetworkRoute() {
   const ipv6mode = watch("ipv6_mode");
   const domain = watch("domain");
   const timeSyncMode = watch("time_sync_mode");
+  const fallbackEnabled = watch("ipv4_fallback_enabled");
 
   const onDhcpLeaseRenew = () => {
     send("renewDHCPLease", {}, resp => {
@@ -587,6 +666,21 @@ export default function SettingsNetworkRoute() {
                 />
               </SettingsItem>
 
+              <SettingsItem
+                title={m.network_discovery_title()}
+                description={m.network_discovery_item_description()}
+              >
+                <Button
+                  size="SM"
+                  theme="light"
+                  type="button"
+                  LeadingIcon={LuRadar}
+                  text={m.network_discovery_open()}
+                  onClick={() => setDiscoveryOpen(true)}
+                  data-testid="network-discovery-open"
+                />
+              </SettingsItem>
+
               {isCloudAdopted && <PublicIPCard />}
 
               {hasTailscale && <TailscaleCard />}
@@ -630,6 +724,56 @@ export default function SettingsNetworkRoute() {
                   )}
                 </AutoHeight>
               </div>
+
+              {ipv4mode === "dhcp" && !formState.isLoading && (
+                <div className="space-y-4">
+                  <SettingsItem
+                    title={m.network_ipv4_fallback_title()}
+                    description={
+                      networkState?.ipv4_fallback_active ? (
+                        <>
+                          {m.network_ipv4_fallback_description()}
+                          <span className="mt-0.5 block text-amber-700 dark:text-amber-500">
+                            {m.network_ipv4_fallback_active()}
+                          </span>
+                        </>
+                      ) : (
+                        m.network_ipv4_fallback_description()
+                      )
+                    }
+                  >
+                    <Checkbox {...register("ipv4_fallback_enabled")} />
+                  </SettingsItem>
+                  {fallbackEnabled && (
+                    <>
+                      <SettingsItem
+                        title={m.network_ipv4_fallback_timeout_title()}
+                        description={m.network_ipv4_fallback_timeout_description()}
+                      >
+                        <InputField
+                          size="SM"
+                          type="number"
+                          min={5}
+                          max={600}
+                          className="w-24"
+                          {...register("ipv4_fallback_timeout", {
+                            valueAsNumber: true,
+                            validate: (value: number | undefined) =>
+                              (value !== undefined && value >= 5 && value <= 600) ||
+                              m.network_ipv4_fallback_timeout_invalid(),
+                          })}
+                          error={formState.errors.ipv4_fallback_timeout?.message}
+                        />
+                      </SettingsItem>
+                      <StaticIpv4Card
+                        field="ipv4_fallback"
+                        title={m.network_ipv4_fallback_card_title()}
+                        description={m.network_ipv4_fallback_card_description()}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
 
               {hasIpv6 && (
                 <>
@@ -779,6 +923,8 @@ export default function SettingsNetworkRoute() {
           </div>
         }
       />
+
+      <NetworkDiscoveryDialog open={discoveryOpen} onClose={() => setDiscoveryOpen(false)} />
 
       <ConfirmDialog
         open={showRenewLeaseConfirm}

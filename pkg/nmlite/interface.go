@@ -35,6 +35,7 @@ type InterfaceManager struct {
 	// Network components
 	staticConfig *StaticConfigManager
 	dhcpClient   *DHCPClient
+	fallback     ipv4Fallback
 
 	// Callbacks
 	onStateChange      func(state types.InterfaceState)
@@ -62,6 +63,9 @@ func NewInterfaceManager(ctx context.Context, ifaceName string, config *types.Ne
 	// Validate and set defaults
 	if err := confparser.SetDefaultsAndValidate(config); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	if err := validateIPv4Fallback(config); err != nil {
+		return nil, err
 	}
 
 	im := &InterfaceManager{
@@ -96,6 +100,9 @@ func NewInterfaceManager(ctx context.Context, ifaceName string, config *types.Ne
 			return
 		}
 
+		if !lease.IsIPv6() {
+			im.endIPv4Fallback(lease)
+		}
 		if err := im.applyDHCPLease(lease); err != nil {
 			im.logger.Error().Err(err).Msg("failed to apply DHCP lease")
 		}
@@ -357,6 +364,9 @@ func (im *InterfaceManager) SetConfig(config *types.NetworkConfig) error {
 	if err := confparser.SetDefaultsAndValidate(config); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
+	if err := validateIPv4Fallback(config); err != nil {
+		return err
+	}
 
 	im.config = config
 
@@ -425,6 +435,7 @@ func (im *InterfaceManager) applyConfiguration() error {
 func (im *InterfaceManager) applyIPv4Config() error {
 	mode := im.config.IPv4Mode.String
 	im.logger.Info().Str("mode", mode).Msg("applying IPv4 configuration")
+	im.resetIPv4Fallback()
 
 	switch mode {
 	case "static":

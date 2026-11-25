@@ -11,16 +11,25 @@ interface AddDeviceFormProps {
   setShowAddForm: (show: boolean) => void;
   errorMessage: string | null;
   setErrorMessage: (errorMessage: string | null) => void;
+  // Filled in from a discovered device.
+  initialName?: string;
+  initialMacAddress?: string;
 }
+
+const MAC_PATTERN = /^([0-9a-fA-F][0-9a-fA-F]:){5}([0-9a-fA-F][0-9a-fA-F])$/;
 
 export default function AddDeviceForm({
   setShowAddForm,
   onAddDevice,
   errorMessage,
   setErrorMessage,
+  initialName = "",
+  initialMacAddress = "",
 }: AddDeviceFormProps) {
-  const [isDeviceNameValid, setIsDeviceNameValid] = useState<boolean>(false);
-  const [isMacAddressValid, setIsMacAddressValid] = useState<boolean>(false);
+  const [isDeviceNameValid, setIsDeviceNameValid] = useState<boolean>(!!initialName);
+  const [isMacAddressValid, setIsMacAddressValid] = useState<boolean>(
+    MAC_PATTERN.test(initialMacAddress),
+  );
   const [broadcastMode, setBroadcastMode] = useState<string>("auto");
   const [customBroadcastIP, setCustomBroadcastIP] = useState<string>("");
 
@@ -40,6 +49,7 @@ export default function AddDeviceForm({
           ref={nameInputRef}
           placeholder={m.wake_on_lan_add_device_example_device_name()}
           label={m.wake_on_lan_add_device_device_name()}
+          defaultValue={initialName}
           required
           onChange={e => {
             setIsDeviceNameValid(e.target.validity.valid);
@@ -51,6 +61,7 @@ export default function AddDeviceForm({
           ref={macInputRef}
           placeholder="00:b0:d0:63:c2:26"
           label={m.wake_on_lan_add_device_mac_address()}
+          defaultValue={initialMacAddress}
           onKeyUp={e => e.stopPropagation()}
           required
           pattern="^([0-9a-fA-F][0-9a-fA-F]:){5}([0-9a-fA-F][0-9a-fA-F])$"
