@@ -118,6 +118,9 @@ type Settings struct {
 	TerminalEnabled  bool
 	FilesEnabled     bool
 	VideoEnabled     bool
+	// HostInfoEnabled lets the sender report the target's system
+	// information (Host info service).
+	HostInfoEnabled bool
 	// Empty lets the sender select.
 	CaptureDisplay string
 	Width          uint32
@@ -385,6 +388,8 @@ type Counters struct {
 	MessagesIn      uint32
 	MessagesSkipped uint32
 	ServiceFaults   uint32
+	// Invalid host info messages, which are dropped.
+	HostInfoDropped uint32
 	BytesIn         uint64
 	BytesDiscarded  uint64
 	BytesOut        uint64
@@ -425,6 +430,8 @@ type Session struct {
 	gap      VideoGapPlatform
 	keyframe KeyframePlatform
 	network  VideoNetworkPlatform
+
+	hostPlatform HostInfoPlatform
 
 	settings Settings
 
@@ -481,6 +488,9 @@ type Session struct {
 	updatePackage string
 	update        Update
 	nextUpdateID  uint32
+
+	// Host info service.
+	hostInfo hostInfoService
 
 	// Video service: the sender's registration.
 	videoRegistered    bool
@@ -560,7 +570,7 @@ type Session struct {
 
 // New makes a session with no USB session in progress. The platform may also
 // implement TerminalPlatform, FilePlatform, VideoPlatform, VideoGapPlatform,
-// KeyframePlatform and VideoNetworkPlatform.
+// KeyframePlatform, VideoNetworkPlatform and HostInfoPlatform.
 func New(p Platform, settings Settings) *Session {
 	s := &Session{
 		p:                    p,
@@ -579,6 +589,7 @@ func New(p Platform, settings Settings) *Session {
 	s.gap, _ = p.(VideoGapPlatform)
 	s.keyframe, _ = p.(KeyframePlatform)
 	s.network, _ = p.(VideoNetworkPlatform)
+	s.hostPlatform, _ = p.(HostInfoPlatform)
 	// A STATUS before the first RESET has a token too.
 	s.fillToken(s.token[:])
 	return s
@@ -648,6 +659,7 @@ func (s *Session) endSession(reason string) {
 	s.endTerminals(terminalDisconnected, false)
 	s.endTransfers(FileFailed, false)
 	s.endUpdate(UpdateFailed, "the OS Services session ended", false)
+	s.clearHostInfo(hostInfoSessionEnded)
 	s.clearRegistrations()
 	s.senderInfoValid = false
 	s.senderVersion = ""
@@ -692,7 +704,8 @@ func (s *Session) sendSessionConfig() bool {
 		// This KVM presents the same monitor each time to a sender that
 		// sets the display's mode (videoDisplaySerial).
 		DisplayModeBySender bool `json:"display_mode_by_sender"`
-	}{s.settings.TerminalEnabled, s.settings.FilesEnabled, s.settings.CaptureDisplay, true})
+		HostInfoEnabled     bool `json:"hostinfo_enabled"`
+	}{s.settings.TerminalEnabled, s.settings.FilesEnabled, s.settings.CaptureDisplay, true, s.settings.HostInfoEnabled})
 	if err != nil {
 		s.endSession("session.config: " + err.Error())
 		return false
@@ -908,6 +921,8 @@ func (s *Session) dispatch(payload []byte) {
 		s.handleFile(payload)
 	case ServiceUpdate:
 		s.handleUpdate(payload)
+	case ServiceHostInfo:
+		s.handleHostInfo(payload)
 	default:
 		s.Counters.MessagesSkipped++
 	}
@@ -929,6 +944,8 @@ func keepsPayload(service, kind uint16) bool {
 		return kind >= fileCapabilities && kind <= fileCancel
 	case ServiceUpdate:
 		return kind >= updateCapabilities && kind <= updateCancel
+	case ServiceHostInfo:
+		return kind == hostInfoCapabilities || kind == hostInfoInventory || kind == hostInfoMetrics || kind == hostInfoResult
 	}
 	return false
 }
@@ -1261,6 +1278,7 @@ func (s *Session) Tick() {
 			s.forgetDrop()
 		}
 	}
+	s.hostInfoTick(now)
 	s.videoTick(now)
 }
 
@@ -1288,8 +1306,13 @@ func (s *Session) ApplySettings(settings Settings) {
 			return
 		}
 	}
+	// The sender withdraws host info when it gets the session.config below.
+	if previous.HostInfoEnabled && !settings.HostInfoEnabled {
+		s.clearHostInfo(hostInfoDisabled)
+	}
 	if previous.TerminalEnabled != settings.TerminalEnabled ||
 		previous.FilesEnabled != settings.FilesEnabled ||
+		previous.HostInfoEnabled != settings.HostInfoEnabled ||
 		previous.CaptureDisplay != settings.CaptureDisplay {
 		if !s.sendSessionConfig() {
 			return
@@ -1352,6 +1375,14 @@ type State struct {
 	StreamFPS       uint32
 	StreamCodec     Codec
 	StreamStarted   bool
+	// HostInfo: the sender reports the target's system information.
+	// HostInfoSections are the section bits it offers. The inventory and
+	// the last metrics are JSON objects, or nil; they are never changed in
+	// place, so they are not copied.
+	HostInfo          bool
+	HostInfoSections  uint32
+	HostInfoInventory json.RawMessage
+	HostInfoMetrics   json.RawMessage
 }
 
 // State returns what the browser shows.
@@ -1380,6 +1411,12 @@ func (s *Session) State() State {
 	st.VideoRegistered = connected && s.videoRegistered
 	if st.VideoRegistered {
 		st.VideoCodecFlags = s.videoCodecFlags
+	}
+	if s.HostInfoAvailable() {
+		st.HostInfo = true
+		st.HostInfoSections = s.hostInfo.sections
+		st.HostInfoInventory = s.hostInfo.inventory
+		st.HostInfoMetrics = s.hostInfo.metrics
 	}
 	st.SenderInfo = connected && s.senderInfoValid
 	if st.SenderInfo {

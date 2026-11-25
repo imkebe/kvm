@@ -157,7 +157,7 @@ func TestNewerMinorSelectsOurs(t *testing.T) {
 	hello := makeHello(5, 7, token, 1)
 	h.send(svcSession, kHello, hello)
 	m := h.expect(svcSession, kReady)
-	if minor := wle.Uint16(m.payload[2:]); minor != 0 {
+	if minor := wle.Uint16(m.payload[2:]); minor != 1 {
 		t.Fatalf("session.ready minor %d", minor)
 	}
 	// The signature covers the hello as sent, minor 7 included.

@@ -476,6 +476,11 @@ function OsServicesSettingsPage() {
                           m.os_services_files_description(),
                         ],
                         [
+                          "host_info_enabled",
+                          m.os_services_host_info_title(),
+                          m.os_services_host_info_description(),
+                        ],
+                        [
                           "clipboard_enabled",
                           m.os_services_clipboard_title(),
                           m.os_services_clipboard_description({

@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef } from "react";
 import { MdOutlineContentPasteGo } from "react-icons/md";
 import {
   LuCable,
+  LuCpu,
   LuExternalLink,
   LuHardDrive,
   LuMaximize,
@@ -29,6 +30,7 @@ import {
   useVideoStore,
 } from "@hooks/stores";
 import { useDeviceUiNavigation } from "@hooks/useAppNavigation";
+import { useHostInfoStore } from "@hooks/hostInfo";
 import { Button } from "@components/Button";
 import Container from "@components/Container";
 import PasteModal from "@components/popovers/PasteModal";
@@ -59,6 +61,7 @@ export default function Actionbar({
     setUsbSerialConsoleEnabled,
     isEmbedMode,
   } = useUiStore();
+  const hostInfoAvailable = useHostInfoStore(state => !!state.state?.available);
   const pasteButtonRef = useRef<HTMLButtonElement>(null);
 
   // A clipboard chord on the video hands its text to the paste popover; the
@@ -367,6 +370,19 @@ export default function Actionbar({
               }}
             />
           </div>
+          {hostInfoAvailable && (
+            <div className="hidden md:block">
+              <Button
+                size="XS"
+                theme="light"
+                text={m.action_bar_host_info()}
+                LeadingIcon={LuCpu}
+                onClick={() => {
+                  toggleSidebarView("host-info");
+                }}
+              />
+            </div>
+          )}
           {!isEmbedMode && (
             <div>
               <Button
