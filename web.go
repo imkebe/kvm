@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -116,6 +117,10 @@ func setupRouter() *gin.Engine {
 			return *ginLogger
 		}),
 	))
+
+	// Browsers read the web app manifest by its type; Go does not know the
+	// extension.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {

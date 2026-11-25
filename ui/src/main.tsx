@@ -33,6 +33,7 @@ import DevicesRoute from "@routes/devices";
 import SettingsIndexRoute from "@routes/devices.$id.settings._index";
 import SettingsAccessIndexRoute from "@routes/devices.$id.settings.access._index";
 import Notifications from "@/notifications";
+import { isStaleChunkError, reloadForNewBuild } from "@/utils/staleBuild";
 const SignupRoute = lazy(() => import("@routes/signup"));
 const LoginRoute = lazy(() => import("@routes/login"));
 const DevicesAlreadyAdopted = lazy(() => import("@routes/devices.already-adopted"));
@@ -348,6 +349,11 @@ if (isOnDevice) {
   router = createBrowserRouter(routeObjects, { basename: import.meta.env.BASE_URL });
 }
 
+// A chunk of an older build that the KVM no longer has: load the new page.
+window.addEventListener("vite:preloadError", event => {
+  if (reloadForNewBuild()) event.preventDefault();
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   ReactDOM.createRoot(document.getElementById("root")!).render(<RouterProvider router={router} />);
 });
@@ -358,6 +364,8 @@ function ErrorBoundary() {
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) return <NotFoundPage />;
   }
+  // Lazy pages of an older build: reload to get the KVM's current page.
+  const staleBuild = isStaleChunkError(error) && reloadForNewBuild();
 
   const getErrorMessage = (err: unknown): string | null => {
     // If it's a route error response, try to read a string at err.data.error.message or err.data.error safely
@@ -387,6 +395,14 @@ function ErrorBoundary() {
 
   const errorMessage = getErrorMessage(error);
 
+  if (staleBuild) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <p className="text-sm text-slate-600 dark:text-slate-400">{m.stale_build_reloading()}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full w-full">
       <div className="flex h-full items-center justify-center">
@@ -394,7 +410,9 @@ function ErrorBoundary() {
           <EmptyCard
             IconElm={ExclamationTriangleIcon}
             headline={m.oh_no()}
-            description={m.something_went_wrong()}
+            description={
+              isStaleChunkError(error) ? m.stale_build_reload_hint() : m.something_went_wrong()
+            }
             BtnElm={
               errorMessage && (
                 <Card>
