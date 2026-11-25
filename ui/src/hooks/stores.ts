@@ -430,6 +430,8 @@ export interface OsServicesSettings {
   last_sender_at?: string;
   adaptation?: string;
   terminal_enabled: boolean;
+  // Programs may open shells over the terminal API WebSocket. Off by default.
+  terminal_api_enabled: boolean;
   // The browser terminal's shell syntax ("auto" or absent: detected) and a
   // command typed first to start another shell.
   terminal_shell?: string;

@@ -199,6 +199,9 @@ func rpcDeleteAPIToken(id string) error {
 	}
 	delete(apiTokenUsed, id)
 	logger.Info().Str("token", id).Msg("API token deleted")
+	if osServices != nil {
+		osServices.closeTokenTerminals(id)
+	}
 	return nil
 }
 

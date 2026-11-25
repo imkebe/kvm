@@ -526,6 +526,9 @@ func rpcSetOsServicesSettings(settings map[string]any) (OSServicesConfig, error)
 		return current, fmt.Errorf("failed to save config: %w", err)
 	}
 	s.applySettings()
+	if current.TerminalAPIEnabled && !merged.TerminalAPIEnabled {
+		s.closeAPITerminals()
+	}
 	s.announceSettings(merged)
 	return merged, nil
 }
