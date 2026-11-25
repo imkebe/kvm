@@ -344,15 +344,57 @@ video::-webkit-media-controls {
   @apply mr-[2px]! md:mr-[5px]!;
 }
 
-/* Reduce font size for selected keys when keyboard is detached */
-.keyboard-detached .simple-keyboard-main.simple-keyboard {
-  min-width: calc(14 * 7ch);
+/* Detached (floating or in its own window): every key stays visible. The
+   layout follows the keyboard's own width, not the page's: below 900px the
+   control and arrow keys go under the main block, and keys shrink to fit. */
+.keyboard-detached .kb-area {
+  container-type: inline-size;
 }
 
+.keyboard-detached .simple-keyboard-main.simple-keyboard {
+  width: 100%;
+  min-width: 0;
+}
+
+.keyboard-detached .controlArrows {
+  width: 100%;
+  flex-flow: row wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0 1rem;
+}
+
+.keyboard-detached .controlArrows .simple-keyboard.hg-theme-default {
+  width: auto;
+}
+
+@container (min-width: 900px) {
+  .keyboard-detached .kb-row {
+    flex-direction: row;
+  }
+
+  .keyboard-detached .simple-keyboard-main.simple-keyboard {
+    width: 80%;
+  }
+
+  .keyboard-detached .controlArrows {
+    width: 20%;
+    flex-flow: column;
+    justify-content: space-between;
+  }
+}
+
+.keyboard-detached .hg-button.hg-standardBtn[data-skbtn="Space"] {
+  width: auto !important;
+  flex-grow: 6;
+}
+
+/* Reduce font size for selected keys when keyboard is detached */
 .keyboard-detached .simple-keyboard.hg-theme-default div.hg-button {
   text-wrap: auto;
   text-align: center;
-  min-width: 6ch;
+  min-width: 0;
+  overflow: hidden;
 }
 .keyboard-detached .simple-keyboard.hg-theme-default .hg-button span {
   font-size: 50%;

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDownIcon } from "@heroicons/react/16/solid";
 import { AnimatePresence, motion } from "framer-motion";
 import { KeyboardReact as Keyboard } from "react-simple-keyboard";
-import { LuKeyboard } from "react-icons/lu";
+import { LuAppWindow, LuKeyboard, LuPanelBottom } from "react-icons/lu";
 
 import "react-simple-keyboard/build/css/index.css";
 import DetachIconRaw from "@/assets/detach-icon.svg";
@@ -14,10 +15,106 @@ import { Button, LinkButton } from "@components/Button";
 import Card from "@components/Card";
 import { decodeModifiers, keys, latchingKeys, modifiers } from "@/keyboardMappings";
 import { m } from "@localizations/messages.js";
+import notifications from "@/notifications";
 
 export const DetachIcon = ({ className }: { className?: string }) => {
   return <img src={DetachIconRaw} alt="Detach Icon" className={className} />;
 };
+
+interface Placement {
+  x: number;
+  y: number;
+  width: number;
+}
+
+// v2: placements saved before 2026-11-24 could hold the 480 px a keyboard
+// shrank to after its own window (it reported 0 x 0 off the page).
+const PLACEMENT_KEY = "jetkvm.virtualKeyboard.detached.v2";
+const DEFAULT_DETACHED_WIDTH = 900;
+const MIN_DETACHED_WIDTH = 480;
+// How much of the title bar stays on screen.
+const KEEP_VISIBLE = 96;
+const TITLE_HEIGHT = 48;
+
+function readPlacement(): Placement | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(PLACEMENT_KEY) ?? "null") as Placement | null;
+    if (value && [value.x, value.y, value.width].every(Number.isFinite)) {
+      return clampPlacement(value);
+    }
+  } catch {
+    // Storage unavailable or unreadable: place it afresh.
+  }
+  return null;
+}
+
+function savePlacement(placement: Placement) {
+  try {
+    localStorage.setItem(PLACEMENT_KEY, JSON.stringify(placement));
+  } catch {
+    // Not remembered; it still works.
+  }
+}
+
+// Anywhere, even partly off screen, as long as part of the title bar can
+// still be grabbed; the bottom row stays on screen when the keyboard fits
+// (height: the keyboard's height, when known).
+function clampPlacement(placement: Placement, height = 0): Placement {
+  const width = Math.max(MIN_DETACHED_WIDTH, Math.min(placement.width, window.innerWidth));
+  const maxY =
+    height > 0 && height <= window.innerHeight
+      ? window.innerHeight - height
+      : window.innerHeight - TITLE_HEIGHT;
+  return {
+    width,
+    x: Math.min(window.innerWidth - KEEP_VISIBLE, Math.max(KEEP_VISIBLE - width, placement.x)),
+    y: Math.min(maxY, Math.max(0, placement.y)),
+  };
+}
+
+// The keyboard library checks its element with instanceof HTMLDivElement,
+// which fails for elements of another window (the keyboard's own window).
+// Elements of other windows of this page count too.
+let foreignDivsAllowed = false;
+function allowForeignDivs() {
+  if (foreignDivsAllowed) return;
+  foreignDivsAllowed = true;
+  const isInstance = Function.prototype[Symbol.hasInstance];
+  Object.defineProperty(HTMLDivElement, Symbol.hasInstance, {
+    configurable: true,
+    value(this: typeof HTMLDivElement, value: unknown) {
+      if (isInstance.call(this, value)) return true;
+      const view = (value as Node | null)?.ownerDocument?.defaultView as
+        | (Window & typeof globalThis)
+        | null;
+      return !!view && view !== window && isInstance.call(view.HTMLDivElement, value);
+    },
+  });
+}
+
+const WINDOW_NAME = "jetkvm-virtual-keyboard";
+
+// Opens the keyboard's own window with this page's styles; null when the
+// browser blocked it.
+function openKeyboardWindow(): { win: Window; container: HTMLElement } | null {
+  const win = window.open("", WINDOW_NAME, "popup,width=1000,height=420");
+  if (!win) return null;
+  const doc = win.document;
+  doc.title = m.virtual_keyboard_header();
+  doc.head.innerHTML = "";
+  document.head.querySelectorAll('link[rel="stylesheet"], style').forEach(node => {
+    const copy = node.cloneNode(true) as HTMLElement;
+    // Absolute, so the new window loads the same files.
+    if (node instanceof HTMLLinkElement) copy.setAttribute("href", node.href);
+    doc.head.appendChild(copy);
+  });
+  doc.documentElement.className = document.documentElement.className;
+  doc.body.className = "m-0 overflow-auto bg-white dark:bg-slate-900";
+  doc.body.innerHTML = "";
+  const container = doc.createElement("div");
+  doc.body.appendChild(container);
+  return { win, container };
+}
 
 function KeyboardWrapper() {
   const keyboardRef = useRef<HTMLDivElement>(null);
@@ -27,9 +124,56 @@ function KeyboardWrapper() {
   const { handleKeyPress, executeMacro } = useKeyboard();
   const { selectedKeyboard } = useKeyboardLayout();
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [newPosition, setNewPosition] = useState({ x: 0, y: 0 });
+  // Detached, the keyboard floats where its title bar is dragged to, at a
+  // width the user can change; both are remembered in this browser.
+  const [placement, setPlacement] = useState<Placement | null>(readPlacement);
+  const drag = useRef<{ dx: number; dy: number; pointerId: number } | null>(null);
+  const heightRef = useRef(0);
+
+  // The keyboard in its own browser window (rendered from this page).
+  const [keyboardWindow, setKeyboardWindow] = useState<{
+    win: Window;
+    container: HTMLElement;
+  } | null>(null);
+
+  const closeKeyboardWindow = useCallback(() => {
+    setKeyboardWindow(current => {
+      if (current && !current.win.closed) current.win.close();
+      return null;
+    });
+  }, []);
+
+  const openWindow = useCallback(() => {
+    allowForeignDivs();
+    const opened = openKeyboardWindow();
+    if (!opened) {
+      notifications.error(m.virtual_keyboard_window_blocked());
+      return;
+    }
+    setKeyboardWindow(opened);
+  }, []);
+
+  // Closing the window brings the keyboard back to this page; leaving the
+  // page closes the window.
+  useEffect(() => {
+    if (!keyboardWindow) return;
+    const timer = window.setInterval(() => {
+      if (keyboardWindow.win.closed) setKeyboardWindow(null);
+    }, 500);
+    const onLeave = () => keyboardWindow.win.close();
+    window.addEventListener("pagehide", onLeave);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", onLeave);
+    };
+  }, [keyboardWindow]);
+
+  // Hiding the keyboard closes its window.
+  useEffect(() => {
+    if (!isVirtualKeyboardEnabled) closeKeyboardWindow();
+  }, [isVirtualKeyboardEnabled, closeKeyboardWindow]);
+
+  useEffect(() => () => closeKeyboardWindow(), [closeKeyboardWindow]);
 
   const keyDisplayMap = useMemo(() => {
     return selectedKeyboard.keyDisplayMap;
@@ -67,77 +211,93 @@ function KeyboardWrapper() {
     return [...modifierNames, ...keyNames, " "]; // we have to have at least one space to avoid keyboard whining
   }, [keysDownState]);
 
-  const startDrag = useCallback((e: MouseEvent | TouchEvent) => {
-    if (!keyboardRef.current) return;
-    if (e instanceof TouchEvent && e.touches.length > 1) return;
-    setIsDragging(true);
+  // Where a newly detached keyboard goes: centred near the bottom.
+  useEffect(() => {
+    if (isAttachedVirtualKeyboardVisible || !isVirtualKeyboardEnabled || placement) return;
+    const width = Math.min(DEFAULT_DETACHED_WIDTH, window.innerWidth - 16);
+    setPlacement(
+      clampPlacement({
+        x: (window.innerWidth - width) / 2,
+        y: window.innerHeight - 380,
+        width,
+      }),
+    );
+  }, [isAttachedVirtualKeyboardVisible, isVirtualKeyboardEnabled, placement]);
 
-    const clientX = e instanceof TouchEvent ? e.touches[0].clientX : e.clientX;
-    const clientY = e instanceof TouchEvent ? e.touches[0].clientY : e.clientY;
-
-    const rect = keyboardRef.current.getBoundingClientRect();
-    setPosition({
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    });
+  // A smaller window keeps the title bar reachable.
+  useEffect(() => {
+    const onResize = () =>
+      setPlacement(current => current && clampPlacement(current, heightRef.current));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const onDrag = useCallback(
-    (e: MouseEvent | TouchEvent) => {
-      if (!keyboardRef.current) return;
-      if (isDragging) {
-        const clientX = e instanceof TouchEvent ? e.touches[0].clientX : e.clientX;
-        const clientY = e instanceof TouchEvent ? e.touches[0].clientY : e.clientY;
+  // The native resize handle changes the width; it is kept for next time.
+  useEffect(() => {
+    const element = keyboardRef.current;
+    if (isAttachedVirtualKeyboardVisible || !element) return;
+    const observer = new ResizeObserver(() => {
+      // Taken off the page (the keyboard moved to its own window) the element
+      // reports 0 x 0; that is not a width to keep.
+      if (!element.isConnected) return;
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const width = Math.round(rect.width);
+      // A taller keyboard (narrower, keys stacked) moves up to stay whole.
+      const heightChanged = Math.abs(heightRef.current - rect.height) >= 2;
+      heightRef.current = rect.height;
+      setPlacement(current => {
+        if (!current) return current;
+        if (Math.abs(current.width - width) < 2) {
+          return heightChanged ? clampPlacement(current, rect.height) : current;
+        }
+        const next = clampPlacement({ ...current, width }, rect.height);
+        savePlacement(next);
+        return next;
+      });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+    // keyboardWindow: back from its own window, the page has a new element.
+  }, [isAttachedVirtualKeyboardVisible, isVirtualKeyboardEnabled, keyboardWindow]);
 
-        const newX = clientX - position.x;
-        const newY = clientY - position.y;
-
-        const rect = keyboardRef.current.getBoundingClientRect();
-        const maxX = window.innerWidth - rect.width;
-        const maxY = window.innerHeight - rect.height;
-
-        setNewPosition({
-          x: Math.min(maxX, Math.max(0, newX)),
-          y: Math.min(maxY, Math.max(0, newY)),
-        });
-      }
+  const onHandlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (isAttachedVirtualKeyboardVisible || !placement) return;
+      if ((e.target as HTMLElement).closest("button, a")) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      drag.current = {
+        dx: e.clientX - placement.x,
+        dy: e.clientY - placement.y,
+        pointerId: e.pointerId,
+      };
     },
-    [isDragging, position.x, position.y],
+    [isAttachedVirtualKeyboardVisible, placement],
   );
 
-  const endDrag = useCallback(() => {
-    setIsDragging(false);
+  const onHandlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== e.pointerId) return;
+    setPlacement(
+      placement =>
+        placement &&
+        clampPlacement(
+          { ...placement, x: e.clientX - current.dx, y: e.clientY - current.dy },
+          heightRef.current,
+        ),
+    );
   }, []);
 
-  useEffect(() => {
-    // Is the keyboard detached or attached?
-    if (isAttachedVirtualKeyboardVisible) return;
-
-    const handle = keyboardRef.current;
-    if (handle) {
-      handle.addEventListener("touchstart", startDrag);
-      handle.addEventListener("mousedown", startDrag);
-    }
-
-    document.addEventListener("mouseup", endDrag);
-    document.addEventListener("touchend", endDrag);
-
-    document.addEventListener("mousemove", onDrag);
-    document.addEventListener("touchmove", onDrag);
-
-    return () => {
-      if (handle) {
-        handle.removeEventListener("touchstart", startDrag);
-        handle.removeEventListener("mousedown", startDrag);
-      }
-
-      document.removeEventListener("mouseup", endDrag);
-      document.removeEventListener("touchend", endDrag);
-
-      document.removeEventListener("mousemove", onDrag);
-      document.removeEventListener("touchmove", onDrag);
-    };
-  }, [isAttachedVirtualKeyboardVisible, endDrag, onDrag, startDrag]);
+  const onHandlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (drag.current?.pointerId !== e.pointerId) return;
+    drag.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setPlacement(placement => {
+      if (placement) savePlacement(placement);
+      return placement;
+    });
+  }, []);
 
   const onKeyUp = useCallback(async (_: string, e: MouseEvent | undefined) => {
     e?.preventDefault();
@@ -196,6 +356,163 @@ function KeyboardWrapper() {
     [executeMacro, handleKeyPress, keyNamesForDownKeys],
   );
 
+  // The card itself: in the page (attached or floating) or in its own window.
+  const renderCard = (inWindow: boolean) => {
+    const detached = inWindow || !isAttachedVirtualKeyboardVisible;
+    const floating = !inWindow && !isAttachedVirtualKeyboardVisible;
+    return (
+      <Card
+        className={cx("overflow-hidden", {
+          "rounded-none": !floating,
+          "keyboard-detached": detached,
+        })}
+      >
+        <div
+          className={cx(
+            "relative flex items-center justify-center border-b border-b-slate-800/30 bg-white px-2 py-4 dark:border-b-slate-300/20 dark:bg-slate-800",
+            floating && "cursor-move touch-none",
+          )}
+          title={floating ? m.virtual_keyboard_drag() : undefined}
+          onPointerDown={floating ? onHandlePointerDown : undefined}
+          onPointerMove={floating ? onHandlePointerMove : undefined}
+          onPointerUp={floating ? onHandlePointerUp : undefined}
+          onPointerCancel={floating ? onHandlePointerUp : undefined}
+        >
+          <div className="absolute left-2 flex items-center gap-x-2">
+            {inWindow ? (
+              <Button
+                size="XS"
+                theme="light"
+                text={m.virtual_keyboard_back_to_page()}
+                LeadingIcon={LuPanelBottom}
+                onClick={closeKeyboardWindow}
+              />
+            ) : isAttachedVirtualKeyboardVisible ? (
+              <Button
+                size="XS"
+                theme="light"
+                text={m.detach()}
+                onClick={() => setAttachedVirtualKeyboardVisibility(false)}
+              />
+            ) : (
+              <>
+                <Button
+                  size="XS"
+                  theme="light"
+                  text={m.attach()}
+                  onClick={() => setAttachedVirtualKeyboardVisibility(true)}
+                />
+                <Button
+                  size="XS"
+                  theme="light"
+                  text={m.virtual_keyboard_new_window()}
+                  LeadingIcon={LuAppWindow}
+                  onClick={openWindow}
+                />
+              </>
+            )}
+          </div>
+          <h2 className="self-center font-sans text-sm leading-none font-medium text-slate-700 select-none dark:text-slate-300">
+            {m.virtual_keyboard_header()}
+          </h2>
+          <div className="absolute right-2 flex items-center gap-x-2">
+            {!inWindow && (
+              <div className="hidden items-center gap-x-2 md:flex">
+                <LinkButton
+                  size="XS"
+                  to="settings/keyboard"
+                  theme="light"
+                  text={selectedKeyboard.name}
+                  LeadingIcon={LuKeyboard}
+                />
+                <div className="h-[20px] w-px bg-slate-800/20 dark:bg-slate-200/20" />
+              </div>
+            )}
+
+            <Button
+              size="XS"
+              theme="light"
+              text={m.hide()}
+              LeadingIcon={ChevronDownIcon}
+              onClick={() => setVirtualKeyboardEnabled(false)}
+            />
+          </div>
+        </div>
+
+        <div className="kb-area">
+          <div
+            className={cx(
+              "kb-row flex flex-col bg-blue-50/80 dark:bg-slate-700",
+              !detached && "md:flex-row",
+            )}
+          >
+            <Keyboard
+              baseClass="simple-keyboard-main"
+              layoutName={mainLayoutName}
+              onKeyPress={onKeyDown}
+              onKeyReleased={onKeyUp}
+              buttonTheme={[
+                {
+                  class: "combination-key",
+                  buttons: "CtrlAltDelete AltMetaEscape CtrlAltBackspace",
+                },
+                {
+                  class: "down-key",
+                  buttons: keyNamesForDownKeys.join(" "),
+                },
+              ]}
+              display={keyDisplayMap}
+              layout={virtualKeyboard.main}
+              disableButtonHold={true}
+              enableLayoutCandidates={false}
+              preventMouseDownDefault={true}
+              preventMouseUpDefault={true}
+              stopMouseDownPropagation={true}
+              stopMouseUpPropagation={true}
+            />
+
+            <div className="controlArrows">
+              <Keyboard
+                baseClass="simple-keyboard-control"
+                theme="simple-keyboard hg-theme-default hg-layout-default"
+                layoutName="default"
+                onKeyPress={onKeyDown}
+                onKeyReleased={onKeyUp}
+                display={keyDisplayMap}
+                layout={virtualKeyboard.control}
+                disableButtonHold={true}
+                enableLayoutCandidates={false}
+                preventMouseDownDefault={true}
+                preventMouseUpDefault={true}
+                stopMouseDownPropagation={true}
+                stopMouseUpPropagation={true}
+              />
+              <Keyboard
+                baseClass="simple-keyboard-arrows"
+                theme="simple-keyboard hg-theme-default hg-layout-default"
+                onKeyPress={onKeyDown}
+                onKeyReleased={onKeyUp}
+                display={keyDisplayMap}
+                layout={virtualKeyboard.arrows}
+                disableButtonHold={true}
+                enableLayoutCandidates={false}
+                preventMouseDownDefault={true}
+                preventMouseUpDefault={true}
+                stopMouseDownPropagation={true}
+                stopMouseUpPropagation={true}
+              />
+            </div>
+            {/* TODO add optional number pad */}
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  if (keyboardWindow && isVirtualKeyboardEnabled) {
+    return createPortal(renderCard(true), keyboardWindow.container);
+  }
+
   return (
     <div
       className="transition-all duration-500 ease-in-out"
@@ -217,127 +534,24 @@ function KeyboardWrapper() {
             <div
               className={cx(
                 !isAttachedVirtualKeyboardVisible
-                  ? "fixed top-0 left-0 z-10 select-none"
+                  ? "fixed top-0 left-0 z-40 overflow-hidden rounded-md shadow-2xl select-none"
                   : "relative",
               )}
               ref={keyboardRef}
-              style={{
-                ...(!isAttachedVirtualKeyboardVisible
-                  ? { transform: `translate(${newPosition.x}px, ${newPosition.y}px)` }
-                  : {}),
-              }}
+              style={
+                !isAttachedVirtualKeyboardVisible
+                  ? {
+                      transform: `translate(${placement?.x ?? 0}px, ${placement?.y ?? 0}px)`,
+                      width: placement?.width ?? DEFAULT_DETACHED_WIDTH,
+                      minWidth: MIN_DETACHED_WIDTH,
+                      maxWidth: "100vw",
+                      resize: "horizontal",
+                      visibility: placement ? "visible" : "hidden",
+                    }
+                  : undefined
+              }
             >
-              <Card
-                className={cx("overflow-hidden", {
-                  "rounded-none": isAttachedVirtualKeyboardVisible,
-                  "keyboard-detached": !isAttachedVirtualKeyboardVisible,
-                })}
-              >
-                <div className="flex items-center justify-center border-b border-b-slate-800/30 bg-white px-2 py-4 dark:border-b-slate-300/20 dark:bg-slate-800">
-                  <div className="absolute left-2 flex items-center gap-x-2">
-                    {isAttachedVirtualKeyboardVisible ? (
-                      <Button
-                        size="XS"
-                        theme="light"
-                        text={m.detach()}
-                        onClick={() => setAttachedVirtualKeyboardVisibility(false)}
-                      />
-                    ) : (
-                      <Button
-                        size="XS"
-                        theme="light"
-                        text={m.attach()}
-                        onClick={() => setAttachedVirtualKeyboardVisibility(true)}
-                      />
-                    )}
-                  </div>
-                  <h2 className="self-center font-sans text-sm leading-none font-medium text-slate-700 select-none dark:text-slate-300">
-                    {m.virtual_keyboard_header()}
-                  </h2>
-                  <div className="absolute right-2 flex items-center gap-x-2">
-                    <div className="hidden items-center gap-x-2 md:flex">
-                      <LinkButton
-                        size="XS"
-                        to="settings/keyboard"
-                        theme="light"
-                        text={selectedKeyboard.name}
-                        LeadingIcon={LuKeyboard}
-                      />
-                      <div className="h-[20px] w-px bg-slate-800/20 dark:bg-slate-200/20" />
-                    </div>
-
-                    <Button
-                      size="XS"
-                      theme="light"
-                      text={m.hide()}
-                      LeadingIcon={ChevronDownIcon}
-                      onClick={() => setVirtualKeyboardEnabled(false)}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex flex-col bg-blue-50/80 md:flex-row dark:bg-slate-700">
-                    <Keyboard
-                      baseClass="simple-keyboard-main"
-                      layoutName={mainLayoutName}
-                      onKeyPress={onKeyDown}
-                      onKeyReleased={onKeyUp}
-                      buttonTheme={[
-                        {
-                          class: "combination-key",
-                          buttons: "CtrlAltDelete AltMetaEscape CtrlAltBackspace",
-                        },
-                        {
-                          class: "down-key",
-                          buttons: keyNamesForDownKeys.join(" "),
-                        },
-                      ]}
-                      display={keyDisplayMap}
-                      layout={virtualKeyboard.main}
-                      disableButtonHold={true}
-                      enableLayoutCandidates={false}
-                      preventMouseDownDefault={true}
-                      preventMouseUpDefault={true}
-                      stopMouseDownPropagation={true}
-                      stopMouseUpPropagation={true}
-                    />
-
-                    <div className="controlArrows">
-                      <Keyboard
-                        baseClass="simple-keyboard-control"
-                        theme="simple-keyboard hg-theme-default hg-layout-default"
-                        layoutName="default"
-                        onKeyPress={onKeyDown}
-                        onKeyReleased={onKeyUp}
-                        display={keyDisplayMap}
-                        layout={virtualKeyboard.control}
-                        disableButtonHold={true}
-                        enableLayoutCandidates={false}
-                        preventMouseDownDefault={true}
-                        preventMouseUpDefault={true}
-                        stopMouseDownPropagation={true}
-                        stopMouseUpPropagation={true}
-                      />
-                      <Keyboard
-                        baseClass="simple-keyboard-arrows"
-                        theme="simple-keyboard hg-theme-default hg-layout-default"
-                        onKeyPress={onKeyDown}
-                        onKeyReleased={onKeyUp}
-                        display={keyDisplayMap}
-                        layout={virtualKeyboard.arrows}
-                        disableButtonHold={true}
-                        enableLayoutCandidates={false}
-                        preventMouseDownDefault={true}
-                        preventMouseUpDefault={true}
-                        stopMouseDownPropagation={true}
-                        stopMouseUpPropagation={true}
-                      />
-                    </div>
-                    {/* TODO add optional number pad */}
-                  </div>
-                </div>
-              </Card>
+              {renderCard(false)}
             </div>
           </motion.div>
         )}

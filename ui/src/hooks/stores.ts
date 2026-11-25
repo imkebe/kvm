@@ -103,6 +103,10 @@ export interface UIState {
 
   isEmbedMode: boolean;
   setEmbedMode: (enabled: boolean) => void;
+
+  // A window with the stream only (?immersive): no bars at all.
+  isImmersiveMode: boolean;
+  setImmersiveMode: (enabled: boolean) => void;
 }
 
 export const useUiStore = create<UIState>(set => ({
@@ -160,6 +164,9 @@ export const useUiStore = create<UIState>(set => ({
 
   isEmbedMode: false,
   setEmbedMode: (enabled: boolean) => set({ isEmbedMode: enabled }),
+
+  isImmersiveMode: false,
+  setImmersiveMode: (enabled: boolean) => set({ isImmersiveMode: enabled }),
 }));
 
 // Its own store: a jiggle event must not re-render what reads useUiStore() whole.
