@@ -172,10 +172,15 @@ type Config struct {
 	Netbird          *NetbirdConfig    `json:"netbird,omitempty"`
 }
 
+// forkUpdateURL is where this firmware finds its own releases: GitHub serves the newest
+// release's file "releases" under it.
+const forkUpdateURL = "https://github.com/imkebe/kvm/releases/latest/download"
+
 // GetUpdateAPIURL returns the update API URL
 func (c *Config) GetUpdateAPIURL() string {
-	if c.UpdateAPIURL == "" {
-		return DefaultAPIURL
+	// The official address counts as not set: this firmware updates from its own releases.
+	if c.UpdateAPIURL == "" || c.UpdateAPIURL == DefaultAPIURL {
+		return forkUpdateURL + "/releases"
 	}
 	return strings.TrimSuffix(c.UpdateAPIURL, "/") + "/releases"
 }
