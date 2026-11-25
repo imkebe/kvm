@@ -21,6 +21,7 @@ import Card from "@components/Card";
 import EmptyCard from "@components/EmptyCard";
 import NotFoundPage from "@components/NotFoundPage";
 import DeviceRoute, { LocalDevice } from "@routes/devices.$id";
+import { VirtualCameraProvider } from "@hooks/VirtualCameraProvider";
 import WelcomeRoute, { DeviceStatus } from "@routes/welcome-local";
 import LoginLocalRoute from "@routes/login-local";
 import WelcomeLocalModeRoute from "@routes/welcome-local.mode";
@@ -47,6 +48,9 @@ const SettingsHardwareIndexRoute = lazy(
   () => import("@routes/devices.$id.settings.hardware._index"),
 );
 const SettingsHardwareUsbRoute = lazy(() => import("@routes/devices.$id.settings.hardware.usb"));
+const SettingsHardwareCameraRoute = lazy(
+  () => import("@routes/devices.$id.settings.hardware.camera"),
+);
 const SettingsVideoRoute = lazy(() => import("@routes/devices.$id.settings.video"));
 const SettingsAudioRoute = lazy(() => import("@routes/devices.$id.settings.audio"));
 const SettingsOsServicesRoute = lazy(() => import("@routes/devices.$id.settings.os-services"));
@@ -126,7 +130,12 @@ function Shell() {
 }
 
 const getDeviceRoute = (r: Omit<RouteObject, "children" | "index">): RouteObject => ({
-  element: <DeviceRoute />,
+  // Always mounted: capabilities arrive after the route is up, so a conditional wrapper would remount the connection.
+  element: (
+    <VirtualCameraProvider>
+        <DeviceRoute />
+    </VirtualCameraProvider>
+  ),
   loader: DeviceRoute.loader,
   ...r,
   children: [
@@ -181,6 +190,7 @@ const getDeviceRoute = (r: Omit<RouteObject, "children" | "index">): RouteObject
           children: [
             { index: true, element: <SettingsHardwareIndexRoute /> },
             { path: "usb", element: <SettingsHardwareUsbRoute /> },
+            { path: "camera", element: <SettingsHardwareCameraRoute /> },
           ],
         },
         {

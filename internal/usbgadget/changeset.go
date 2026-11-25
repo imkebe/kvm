@@ -107,6 +107,7 @@ type RequestedFileChange struct {
 	Key             string
 	Path            string // will be used as Key if Key is empty
 	ParamSymlinks   []symlink
+	ForceRecreate   bool // recreate configfs function objects even when their order matches
 	ExpectedState   FileState
 	ExpectedContent []byte
 	DependsOn       []string
@@ -167,6 +168,7 @@ func (f *RequestedFileChange) IsSame(other *RequestedFileChange) bool {
 		f.ExpectedState == other.ExpectedState &&
 		reflect.DeepEqual(f.ExpectedContent, other.ExpectedContent) &&
 		reflect.DeepEqual(f.DependsOn, other.DependsOn) &&
+		f.ForceRecreate == other.ForceRecreate &&
 		f.IgnoreErrors == other.IgnoreErrors
 }
 
@@ -349,7 +351,7 @@ func (fc *FileChange) getFileChangeResolvedAction() FileChangeResolvedAction {
 		return FileChangeResolvedActionCreateSymlink
 	case FileStateSymlinkInOrderConfigFS:
 		// if the file is already a symlink, check if the target is the same
-		if fc.ActualState == FileStateSymlinkInOrderConfigFS {
+		if fc.ActualState == FileStateSymlinkInOrderConfigFS && !fc.ForceRecreate {
 			return FileChangeResolvedActionDoNothing
 		}
 		return FileChangeResolvedActionReorderSymlinks

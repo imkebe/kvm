@@ -449,6 +449,7 @@ func rpcGetDeviceCapabilities() ([]string, error) {
 		"shell", "extensions", "usb_serial", "custom_edid", "upload_channel", "video_during_update",
 		"http_proxy", "domain", "mdns", "ipv6",
 		"tls", "local_loopback", "log_level", "tailscale",
+		"usb_virtual_devices",
 		"storage_download",
 	}
 	if osServices != nil {
@@ -822,6 +823,13 @@ func rpcGetUsbConfig() (usbgadget.Config, error) {
 func rpcSetUsbConfig(usbConfig usbgadget.Config) error {
 	osServicesNoteKVMRestart()
 	LoadConfig()
+	// Camera format changes use setVirtualVideoConfig to keep descriptors/output in sync.
+	if virtualVideo != nil {
+		virtualVideo.mu.Lock()
+		usbConfig.VideoCodec = virtualVideo.config.Codec
+		usbConfig.VideoSize, usbConfig.VideoFPS = virtualVideo.config.USBSize, virtualVideo.config.USBFPS
+		virtualVideo.mu.Unlock()
+	}
 	config.UsbConfig = &usbConfig
 	gadget.SetGadgetConfig(config.UsbConfig)
 	return updateUsbRelatedConfig()
@@ -1078,8 +1086,25 @@ func rpcGetUsbEndpointUsage(devices usbgadget.Devices) (usbgadget.INEndpointUsag
 
 func updateUsbRelatedConfig() error {
 	setUSBRecoveryTimer(time.Now())
+	if virtualVideo != nil {
+		virtualVideo.mu.Lock()
+		virtualVideo.closeDeviceLocked()
+		virtualVideo.mu.Unlock()
+	}
 	if err := gadget.UpdateGadgetConfig(); err != nil {
 		return fmt.Errorf("failed to write gadget config: %w", err)
+	}
+	if virtualVideo != nil && config.UsbDevices.Video {
+		virtualVideo.mu.Lock()
+		err := virtualVideo.openDeviceLocked()
+		virtualVideo.state.Streaming = virtualVideo.config.Enabled && virtualVideo.device != nil
+		virtualVideo.mu.Unlock()
+		if err != nil {
+			return fmt.Errorf("failed to arm USB video: %w", err)
+		}
+	}
+	if virtualVideo != nil && !config.UsbDevices.Video {
+		virtualVideo.Stop()
 	}
 	// Reset recovery timer so auto-recovery doesn't interfere during
 	// the host's USB re-enumeration window after a deliberate config change.
@@ -1132,6 +1157,8 @@ func rpcSetUsbDeviceState(device string, enabled bool) error {
 		devices.MassStorage = enabled
 	case "serialConsole":
 		devices.SerialConsole = enabled
+	case "video":
+		devices.Video = enabled
 	case "audio":
 		devices.Audio = enabled
 	default:
@@ -1646,6 +1673,11 @@ var rpcHandlers = map[string]RPCHandler{
 	"setUsbDevices":              {Func: rpcSetUsbDevices, Params: []string{"devices"}},
 	"getUsbEndpointUsage":        {Func: rpcGetUsbEndpointUsage, Params: []string{"devices"}},
 	"setUsbDeviceState":          {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},
+	"getVirtualVideoState":       {Func: rpcGetVirtualVideoState},
+	"getVirtualVideoPreview":     {Func: rpcGetVirtualVideoPreview},
+	"setVirtualVideoConfig":      {Func: rpcSetVirtualVideoConfig, Params: []string{"config"}},
+	"startVirtualVideo":          {Func: rpcStartVirtualVideo},
+	"stopVirtualVideo":           {Func: rpcStopVirtualVideo},
 	"setCloudUrl":                {Func: rpcSetCloudUrl, Params: []string{"apiUrl", "appUrl"}},
 	"getKeyboardLayout":          {Func: rpcGetKeyboardLayout},
 	"setKeyboardLayout":          {Func: rpcSetKeyboardLayout, Params: []string{"layout"}},

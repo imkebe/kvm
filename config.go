@@ -216,6 +216,7 @@ var (
 		Keyboard:      true,
 		MassStorage:   true,
 		SerialConsole: false,
+		Video:         false,
 		Audio:         true,
 	}
 )

@@ -944,6 +944,7 @@ export type Capability =
   | "shell"
   | "extensions"
   | "usb_serial"
+  | "usb_virtual_devices" // USB camera and Ethernet controls with live telemetry
   | "custom_edid"
   | "upload_channel"
   | "video_during_update" // video keeps streaming while an update installs

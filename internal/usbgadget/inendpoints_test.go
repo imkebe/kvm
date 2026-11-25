@@ -2,6 +2,7 @@ package usbgadget
 
 import (
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -108,6 +109,12 @@ func TestINEndpointBudget(t *testing.T) {
 	if got := u.INEndpointsNeeded(devices, true); got != 7 {
 		t.Fatalf("default devices with the external function: %d, want 7", got)
 	}
+	devices.Video = true
+	// Camera on 6 (control) and 7 (streaming); OS Services would start on
+	// 8: spare on 8, its endpoint on 9.
+	if err := u.CheckINEndpoints(devices, true); err != nil {
+		t.Fatalf("camera and the external function: %v", err)
+	}
 }
 
 // The usage split adds up to the count the gadget checks.
@@ -124,6 +131,7 @@ func TestINEndpointUsageMatchesNeeded(t *testing.T) {
 	for _, devices := range []Devices{
 		defaultUsbGadgetDevices,
 		{Keyboard: true},
+		{Keyboard: true, AbsoluteMouse: true, RelativeMouse: true, Video: true, Microphone: true, Audio: true},
 	} {
 		for _, external := range []bool{false, true} {
 			usage := u.INEndpointUsage(devices, external)
@@ -138,5 +146,36 @@ func TestINEndpointUsageMatchesNeeded(t *testing.T) {
 				t.Errorf("total %d", usage.Total)
 			}
 		}
+	}
+}
+
+// New camera sizes keep the old frame indexes (directory creation order
+// follows order) and every rate maps to a UVC interval.
+func TestVideoFrameTable(t *testing.T) {
+	wantFirst := []string{"480", "720", "360", "1080"}
+	sorted := append([]VideoFrameSize(nil), VideoFrameSizes...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].order < sorted[j].order })
+	for i, key := range wantFirst {
+		if sorted[i].Key != key {
+			t.Fatalf("frame index %d is %s, want %s", i+1, sorted[i].Key, key)
+		}
+	}
+	for _, f := range VideoFrameSizes {
+		if f.order <= videoStreamingMJPEGConfig.order || f.order >= videoStreamingHeaderConfig.order {
+			t.Errorf("%s: order %d outside the frame range", f.Key, f.order)
+		}
+		if _, ok := defaultGadgetConfig["video_streaming_mjpeg_"+f.Key]; !ok {
+			t.Errorf("%s: no gadget item", f.Key)
+		}
+	}
+	list, first := videoIntervals(0)
+	if first != "333333" || len(strings.Fields(list)) != len(VideoFrameRates) {
+		t.Fatalf("all rates: %q first %q", list, first)
+	}
+	if list, first := videoIntervals(24); list != "416666" || first != "416666" {
+		t.Fatalf("24 fps: %q %q", list, first)
+	}
+	if !ValidVideoSize("900") || ValidVideoSize("800") || !ValidVideoFPS(25) || ValidVideoFPS(60) {
+		t.Fatal("size or rate validation")
 	}
 }

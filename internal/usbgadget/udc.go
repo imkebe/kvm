@@ -1,11 +1,13 @@
 package usbgadget
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -55,6 +57,33 @@ func rebindUsb(udc string, ignoreUnbindError bool) error {
 		}
 	}
 
+	return nil
+}
+
+// resetControllerForVideo clears the controller's endpoint state before a
+// layout change. The gadget must stay detached during the controller reset:
+// otherwise DWC3 re-registers the old UVC video_device, which the vendor driver
+// cannot safely do. The configuration transaction links a fresh UVC function
+// and attaches the new gadget afterwards.
+func resetControllerForVideo(udc, gadgetPath string) error {
+	return resetControllerForVideoWith(udc, gadgetPath, os.WriteFile)
+}
+
+func resetControllerForVideoWith(udc, gadgetPath string, write func(string, []byte, os.FileMode) error) error {
+	if err := write(path.Join(gadgetPath, "UDC"), []byte("\n"), 0644); err != nil && !os.IsNotExist(err) {
+		// configfs returns ENODEV when the gadget is already detached, such
+		// as after a failed bind. Verify the empty UDC before allowing reset.
+		bound, readErr := os.ReadFile(path.Join(gadgetPath, "UDC"))
+		if !errors.Is(err, syscall.ENODEV) || readErr != nil || strings.TrimSpace(string(bound)) != "" {
+			return fmt.Errorf("detach gadget before video controller reset: %w", err)
+		}
+	}
+	if err := write(path.Join(dwc3Path, "unbind"), []byte(udc), 0644); err != nil {
+		return fmt.Errorf("unbind video controller: %w", err)
+	}
+	if err := write(path.Join(dwc3Path, "bind"), []byte(udc), 0644); err != nil {
+		return fmt.Errorf("bind video controller: %w", err)
+	}
 	return nil
 }
 
@@ -159,6 +188,15 @@ func (u *UsbGadget) rebindUsbWith(rebind func() error) error {
 	u.configLock.Lock()
 	defer u.configLock.Unlock()
 
+	if u.enabledDevices.Video {
+		return u.withHIDRebind(func() error {
+			u.ResetHIDFiles()
+			if err := softDisconnect(u.udc); err != nil {
+				return err
+			}
+			return softConnect(u.udc)
+		})
+	}
 	return u.withHIDRebind(rebind)
 }
 

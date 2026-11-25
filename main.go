@@ -67,6 +67,7 @@ func Main() {
 	initOSServices()
 	setProcTitle("initUsbGadget")
 	initUsbGadget()
+	initVirtualVideo()
 
 	setProcTitle("initNative")
 	initNative(systemVersionLocal, appVersionLocal)
