@@ -450,6 +450,7 @@ func rpcGetDeviceCapabilities() ([]string, error) {
 		"http_proxy", "domain", "mdns", "ipv6",
 		"tls", "local_loopback", "log_level", "tailscale",
 		"usb_virtual_devices",
+		"usb_virtual_microphone",
 		"storage_download",
 	}
 	if osServices != nil {
@@ -1091,6 +1092,11 @@ func updateUsbRelatedConfig() error {
 		virtualVideo.closeDeviceLocked()
 		virtualVideo.mu.Unlock()
 	}
+	// The playback stream belongs to the gadget that is about to be rebuilt.
+	// The next audio frame opens it again.
+	if virtualAudio != nil {
+		virtualAudio.Close()
+	}
 	if err := gadget.UpdateGadgetConfig(); err != nil {
 		return fmt.Errorf("failed to write gadget config: %w", err)
 	}
@@ -1159,6 +1165,8 @@ func rpcSetUsbDeviceState(device string, enabled bool) error {
 		devices.SerialConsole = enabled
 	case "video":
 		devices.Video = enabled
+	case "microphone":
+		devices.Microphone = enabled
 	case "audio":
 		devices.Audio = enabled
 	default:
@@ -1674,6 +1682,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getUsbEndpointUsage":        {Func: rpcGetUsbEndpointUsage, Params: []string{"devices"}},
 	"setUsbDeviceState":          {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},
 	"getVirtualVideoState":       {Func: rpcGetVirtualVideoState},
+	"getVirtualAudioState":       {Func: rpcGetVirtualAudioState},
 	"getVirtualVideoPreview":     {Func: rpcGetVirtualVideoPreview},
 	"setVirtualVideoConfig":      {Func: rpcSetVirtualVideoConfig, Params: []string{"config"}},
 	"startVirtualVideo":          {Func: rpcStartVirtualVideo},

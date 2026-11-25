@@ -26,3 +26,26 @@ var audioConfig = gadgetConfigItem{
 	// the status endpoint.
 	inEndpoints: 0,
 }
+
+// syncAudioAttrs sets the directions of the audio function from the enabled
+// devices. c_chmask is the host-to-KVM direction (the KVM captures what the
+// host plays); p_chmask is the KVM-to-host direction, the virtual
+// microphone. f_uac1 needs at least one direction. Both stay off the status
+// endpoint: the feature units are disabled above.
+func (u *UsbGadget) syncAudioAttrs() {
+	item, ok := u.configMap["audio"]
+	if !ok || item.attrs == nil {
+		return
+	}
+	capture, microphone := "0", "0"
+	if u.enabledDevices.Audio || !u.enabledDevices.Microphone {
+		capture = "3"
+	}
+	if u.enabledDevices.Microphone {
+		microphone = "3"
+		item.attrs["p_srate"] = "48000"
+		item.attrs["p_ssize"] = "2"
+	}
+	item.attrs["c_chmask"] = capture
+	item.attrs["p_chmask"] = microphone
+}

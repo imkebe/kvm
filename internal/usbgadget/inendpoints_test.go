@@ -74,6 +74,44 @@ func TestSparesNotNeededForDefaultDevices(t *testing.T) {
 	dataEndpointsAreReliable(t, u)
 }
 
+func TestMicrophoneGetsSpareBeforeAudio(t *testing.T) {
+	// HID x4 take 1-4 and the audio function would take 5, which pushes mass
+	// storage onto IN 6. The microphone is fine on 5; mass storage must not
+	// land on 6, so a spare goes before mass storage.
+	d := allDefault
+	d.Microphone = true
+	u := planGadget(d, true)
+	dataEndpointsAreReliable(t, u)
+	if got := u.plannedSpares()[2990]; got != 1 {
+		t.Fatalf("spares before mass storage = %d, want 1; plan %v", got, u.plannedSpares())
+	}
+	if !u.isGadgetConfigItemEnabled(spareKey(2990, 1)) || u.isGadgetConfigItemEnabled(spareKey(2990, 2)) {
+		t.Fatal("expected exactly the first spare in slot 2990 to be enabled")
+	}
+}
+
+func TestAudioAttrsFollowDevices(t *testing.T) {
+	cases := []struct {
+		devices      Devices
+		capture, mic string
+	}{
+		{Devices{Audio: true}, "3", "0"},
+		{Devices{Microphone: true}, "0", "3"},
+		{Devices{Audio: true, Microphone: true}, "3", "3"},
+	}
+	for _, c := range cases {
+		u := planGadget(c.devices, false)
+		u.syncAudioAttrs()
+		attrs := u.configMap["audio"].attrs
+		if attrs["c_chmask"] != c.capture || attrs["p_chmask"] != c.mic {
+			t.Errorf("%+v: c_chmask=%s p_chmask=%s, want %s %s", c.devices, attrs["c_chmask"], attrs["p_chmask"], c.capture, c.mic)
+		}
+		if !u.isGadgetConfigItemEnabled("audio") {
+			t.Errorf("%+v: audio item disabled", c.devices)
+		}
+	}
+}
+
 // Upstream counts a function's IN endpoints in gadgetConfigItem.inEndpoints.
 // Where it sets a count, the count must match inEndpointsByKey.
 func TestINEndpointCountsMatchUpstream(t *testing.T) {

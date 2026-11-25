@@ -20,6 +20,7 @@ import {
   LuChevronRight,
   LuUsb,
   LuCamera,
+  LuMic,
   LuMonitorSmartphone,
 } from "react-icons/lu";
 
@@ -52,6 +53,7 @@ export default function SettingsRoute() {
     { to: "hardware", end: true, icon: LuMonitorSmartphone, label: m.settings_hardware_display() },
     { to: "hardware/usb", end: false, icon: LuUsb, label: m.settings_hardware_usb() },
     { to: "hardware/camera", end: false, icon: LuCamera, label: m.settings_hardware_camera() },
+    { to: "hardware/microphone", end: false, icon: LuMic, label: m.settings_hardware_microphone() },
   ];
 
   // Handle scroll position to show/hide gradients
