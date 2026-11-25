@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LuCheck, LuCircleX, LuUpload, LuX } from "react-icons/lu";
 
 import {
   useCapability,
@@ -9,6 +10,7 @@ import {
   useVideoStore,
   VideoState,
 } from "@hooks/stores";
+import { useGuestFileTransferStore } from "@hooks/useGuestFileDrop";
 import { useHidRpc } from "@hooks/useHidRpc";
 import useKeyboard from "@hooks/useKeyboard";
 import { keys, modifiers } from "@/keyboardMappings";
@@ -25,6 +27,62 @@ function GuestIndicator({ on, label }: { on: boolean; label: string }) {
       )}
     >
       {label}
+    </div>
+  );
+}
+
+// Files on their way to the target (a drop on the video): the same drop as
+// the status card, shown and cleared with it. Fixed widths, so the bar does
+// not move while the percent changes.
+function GuestFileTransferIndicator() {
+  const { visible, transfers, cancel } = useGuestFileTransferStore();
+  if (!visible || transfers.length === 0) return null;
+  const sending = cancel !== null;
+  const failed = transfers.some(t => t.status === "failed" || t.status === "cancelled");
+  const sent = transfers.reduce((total, t) => total + t.sent, 0);
+  const size = transfers.reduce((total, t) => total + t.size, 0);
+  const percent = size === 0 ? 100 : Math.min(100, Math.round((sent / size) * 100));
+  const subject =
+    transfers.length === 1
+      ? transfers[0].name
+      : m.guest_file_transfer_count({ count: transfers.length });
+  const title = sending
+    ? m.info_file_transfer_sending({ subject, percent })
+    : failed
+      ? m.info_file_transfer_failed({ subject })
+      : m.guest_file_transfer_done();
+  return (
+    <div className="flex shrink-0 items-center gap-x-1.5 p-1 px-1.5 text-xs" title={title}>
+      {sending ? (
+        <LuUpload className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+      ) : failed ? (
+        <LuCircleX className="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
+      ) : (
+        <LuCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      )}
+      <span className="max-w-32 truncate">{subject}</span>
+      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-500/20">
+        <div
+          className={cx("h-full rounded-full transition-[width] duration-200", {
+            "bg-blue-500": sending,
+            "bg-red-500": !sending && failed,
+            "bg-emerald-500": !sending && !failed,
+          })}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <span className="w-8 text-right tabular-nums">{percent}%</span>
+      {sending && (
+        <button
+          type="button"
+          onClick={() => cancel?.()}
+          aria-label={m.info_file_transfer_cancel()}
+          title={m.info_file_transfer_cancel()}
+          className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+        >
+          <LuX className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
@@ -237,6 +295,8 @@ export default function InfoBar() {
               {m.info_relayed_by_cloudflare()}
             </div>
           )}
+
+          <GuestFileTransferIndicator />
 
           {hasOsServices && osServices.enabled && (
             <div className="flex items-center divide-x divide-slate-800/20 border-r-2 border-r-slate-800/30 dark:divide-slate-300/20 dark:border-r-slate-300/30">
