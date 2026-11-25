@@ -3,6 +3,7 @@ package kvm
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -83,6 +84,104 @@ func (d *idleVideoOutput) Reset()                              { d.resets++ }
 func (d *idleVideoOutput) Close() error                        { return nil }
 func (d *idleVideoOutput) Status() (bool, uint64, error)       { return false, 0, nil }
 func (d *idleVideoOutput) Recovery() (bool, uint64)            { return true, 0 }
+
+func previewProtocolFrame(sequence uint32, flags uint16, payload []byte) []byte {
+	data := makeVirtualVideoTestFrame(payload)
+	binary.BigEndian.PutUint16(data[4:6], 2)
+	binary.BigEndian.PutUint16(data[6:8], flags)
+	binary.BigEndian.PutUint32(data[8:12], sequence)
+	return data
+}
+
+func TestH264PreviewWithoutUSBReader(t *testing.T) {
+	m := newVirtualVideoManager()
+	m.config.Codec = "h264"
+	m.config.Enabled = true
+	m.previewUntil = time.Now().Add(time.Minute)
+	device := &idleVideoOutput{}
+	m.device = device
+	key := []byte{0, 0, 1, 0x67, 42, 0, 0, 1, 0x68, 12, 0, 0, 1, 0x65, 99}
+	delta := []byte{0, 0, 1, 0x41, 88}
+	if err := m.HandleFrameData(previewProtocolFrame(7, 3, key), "rtc-datachannel"); err != nil {
+		t.Fatal(err)
+	}
+	// The JPEG sidecar finishes after two newer H.264 access units.
+	for seq := uint32(8); seq <= 9; seq++ {
+		if err := m.HandleFrameData(previewProtocolFrame(seq, 1, delta), "rtc-datachannel"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if device.resets != 0 {
+		t.Fatal("host drops were mistaken for missing input frames")
+	}
+	if m.state.FramesWritten != 0 {
+		t.Fatal("preview test unexpectedly queued USB output")
+	}
+	// A sidecar does not need to open/reopen a UVC output device.
+	m.device = nil
+	jpegFrame := previewProtocolFrame(7, 4, previewTestJPEG(t, 640, 480))
+	if err := m.HandleFrameData(jpegFrame, "rtc-datachannel"); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := m.Preview()
+	if err != nil || preview.JPEG == "" || preview.FrameAt.IsZero() {
+		t.Fatalf("missing independent source preview: %v", err)
+	}
+	received := m.previewAt
+	for _, seq := range []uint32{7, 6, 10, ^uint32(0) - 51} {
+		if err := m.HandleFrameData(previewProtocolFrame(seq, 4, previewTestJPEG(t, 640, 480)), "rtc-datachannel"); err != nil {
+			t.Fatal(err)
+		}
+		if !m.previewAt.Equal(received) {
+			t.Fatalf("accepted duplicate, old or future preview %d", seq)
+		}
+	}
+	m.receivedAt = time.Now().Add(-5 * time.Second)
+	if err := m.HandleFrameData(previewProtocolFrame(9, 4, previewTestJPEG(t, 640, 480)), "rtc-datachannel"); err != nil {
+		t.Fatal(err)
+	}
+	if !m.previewAt.Equal(received) {
+		t.Fatal("accepted preview after input went stale")
+	}
+	m.Stop()
+	m.config.Enabled = true
+	if err := m.HandleFrameData(jpegFrame, "rtc-datachannel"); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.latestFrame) != 0 {
+		t.Fatal("late sidecar restored stopped-session footage")
+	}
+}
+
+func TestH264PreviewSequenceWrapAndChannelReplacement(t *testing.T) {
+	m := newVirtualVideoManager()
+	m.config.Codec = "h264"
+	m.config.Enabled = true
+	m.previewUntil = time.Now().Add(time.Minute)
+	old := m.BeginChannel()
+	m.haveSequence = true
+	m.lastSequence = 1
+	m.receivedAt = time.Now()
+	payload := previewTestJPEG(t, 640, 480)
+	for _, seq := range []uint32{^uint32(0), 0, 1} {
+		if err := m.HandleChannelFrameData(old, previewProtocolFrame(seq, 4, payload), "rtc-datachannel"); err != nil {
+			t.Fatal(err)
+		}
+		if !m.havePreviewSequence || m.previewSequence != seq {
+			t.Fatalf("rejected recent preview across wrap: %d", seq)
+		}
+	}
+	current := m.BeginChannel()
+	if err := m.HandleChannelFrameData(old, previewProtocolFrame(1, 4, payload), "rtc-datachannel"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.HandleChannelFrameData(current, previewProtocolFrame(1, 4, payload), "rtc-datachannel"); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.latestFrame) != 0 {
+		t.Fatal("old or uncorrelated sidecar leaked into replacement session")
+	}
+}
 
 // A USB camera that the target reads: every frame is written.
 type readVideoOutput struct{ idleVideoOutput }

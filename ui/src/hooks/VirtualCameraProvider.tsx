@@ -269,6 +269,8 @@ function useCameraController() {
       return {
         send: async (payload: Uint8Array) => {
           if (channel.readyState !== "open") throw new Error("Camera connection closed");
+          if (channel.bufferedAmount > 1024 * 1024 && codec === "h264")
+            throw new Error("H.264 connection is too slow; restart or choose MJPEG");
           if (channel.bufferedAmount > 256 * 1024 && codec !== "h264") return;
           channel.send(new Uint8Array(payload).buffer);
         },
@@ -339,6 +341,33 @@ function useCameraController() {
         device_path: "auto",
         enabled: true,
       };
+      // The H.264 level and the bitrate follow the frame size. The KVM
+      // relays about 3 Mbit/s of camera frames without slowing the mouse.
+      const tall = nextConfig.height >= 1080;
+      const medium = nextConfig.height >= 720;
+      const h264Config: VideoEncoderConfig = {
+        codec: tall ? "avc1.42E028" : medium ? "avc1.42E01F" : "avc1.42E01E",
+        width: nextConfig.width,
+        height: nextConfig.height,
+        framerate: nextConfig.fps,
+        bitrate: 1_500_000,
+        latencyMode: "realtime",
+        avc: { format: "annexb" },
+      };
+      if (nextConfig.codec === "h264") {
+        let supported = false;
+        try {
+          supported =
+            typeof VideoEncoder !== "undefined" &&
+            !!(await VideoEncoder.isConfigSupported(h264Config)).supported;
+        } catch {
+          /* Unsupported encoder configuration falls back to MJPEG. */
+        }
+        if (!supported) {
+          nextConfig.codec = "mjpeg";
+          notifications.error("This browser cannot encode H.264. Using MJPEG instead.");
+        } else nextConfig.transport = "rtc-datachannel";
+      }
       setConfig(nextConfig);
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -437,7 +466,12 @@ function useCameraController() {
         sender.close();
         stream.getTracks().forEach(track => track.stop());
       };
+      let lastPreviewSent = -1;
+      let previewPending = false;
       let frameInFlight = false;
+      let encoder: VideoEncoder | undefined;
+      let lastKeyframe = 0;
+      let lastPreview = 0;
       let lastJpegAt = 0;
       // The KVM's processor is full at about 7.5 Mbit/s of camera frames,
       // and the mouse and keyboard then lag. Whatever rate the USB host
@@ -457,6 +491,7 @@ function useCameraController() {
         const dh = sh * scale;
         ctx.drawImage(video, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
       };
+      const previewFrames = new Map<number, Promise<Uint8Array>>();
       const fail = (error: unknown) => {
         if (session !== sessionRef.current) return;
         ++sessionRef.current;
@@ -466,11 +501,71 @@ function useCameraController() {
         stopRemote();
         notifications.error(error instanceof Error ? error.message : "Camera connection lost");
       };
+      if (nextConfig.codec === "h264") {
+        encoder = new VideoEncoder({
+          error: fail,
+          output: chunk => {
+            if (session !== sessionRef.current) return;
+            // A data channel message is limited to 256 KiB. A larger access
+            // unit is skipped, and the next one is a keyframe.
+            if (chunk.byteLength > 240 * 1024) {
+              lastKeyframe = 0;
+              return;
+            }
+            const payload = new Uint8Array(chunk.byteLength);
+            chunk.copyTo(payload);
+            const seq = sequence++;
+            sentFrames++;
+            sentBytes += payload.byteLength;
+            void sender
+              .send(
+                encodeFrame(
+                  seq,
+                  nextConfig.width,
+                  nextConfig.height,
+                  payload,
+                  chunk.type === "key" ? 3 : 1,
+                ),
+              )
+              .catch(fail);
+            const preview = previewFrames.get(chunk.timestamp);
+            previewFrames.delete(chunk.timestamp);
+            if (preview)
+              void preview
+                .then(jpeg => {
+                  if (
+                    session === sessionRef.current &&
+                    seq > lastPreviewSent &&
+                    sequence - seq <= 60 &&
+                    performance.now() - chunk.timestamp / 1000 < 4000 &&
+                    sender.canSend()
+                  ) {
+                    lastPreviewSent = seq;
+                    return sender.send(
+                      encodeFrame(seq, nextConfig.width, nextConfig.height, jpeg, 4),
+                    );
+                  }
+                })
+                .catch(fail);
+          },
+        });
+        cleanupRef.current = () => {
+          window.clearInterval(statsTimer);
+          if (encoder && encoder.state !== "closed") encoder.close();
+          previewFrames.clear();
+          sender.close();
+          video.srcObject = null;
+          stream.getTracks().forEach(track => track.stop());
+        };
+        encoder.configure(h264Config);
+      }
       const interval = window.setInterval(
         async () => {
           if (frameInFlight || session !== sessionRef.current) return;
+          if (encoder && (!sender.canSend() || encoder.encodeQueueSize > 1)) return;
           frameInFlight = true;
           try {
+            if (!encoder) {
               // The USB host picks the frame size and rate; the KVM reports
               // them in its state and drops frames of another size.
               const live = stateRef.current;
@@ -495,7 +590,33 @@ function useCameraController() {
                 canvas.width = width;
                 canvas.height = height;
               }
+            }
             drawCover();
+            if (encoder) {
+              const now = performance.now();
+              const timestamp = Math.round(now * 1000);
+              // Independent IDRs every second allow USB host startup and recovery.
+              const keyFrame =
+                lastKeyframe === 0 ||
+                now - lastKeyframe >= 1000 ||
+                (!!stateRef.current?.needs_keyframe && now - lastKeyframe >= 250);
+              if (keyFrame) lastKeyframe = now;
+              if (!previewPending && previewFrames.size < 2 && now - lastPreview >= 1000) {
+                lastPreview = now;
+                previewPending = true;
+                const preview = canvasToJpeg(canvas).finally(() => {
+                  previewPending = false;
+                });
+                void preview.catch(() => {});
+                previewFrames.set(timestamp, preview);
+              }
+              const frame = new VideoFrame(canvas, { timestamp });
+              try {
+                encoder.encode(frame, { keyFrame });
+              } finally {
+                frame.close();
+              }
+            } else {
               const jpeg = await canvasToJpeg(canvas);
               if (session !== sessionRef.current) return;
               // A data channel message is limited to 256 KiB: skip a frame
@@ -505,6 +626,7 @@ function useCameraController() {
               sentFrames++;
               sentBytes += jpeg.length;
               await sender.send(encodeFrame(sequence++, canvas.width, canvas.height, jpeg));
+            }
           } catch (error) {
             fail(error);
           } finally {
@@ -516,6 +638,8 @@ function useCameraController() {
       cleanupRef.current = () => {
         window.clearInterval(statsTimer);
         window.clearInterval(interval);
+        if (encoder && encoder.state !== "closed") encoder.close();
+        previewFrames.clear();
         sender.close();
         video.srcObject = null;
         stream.getTracks().forEach(track => track.stop());

@@ -668,6 +668,10 @@ func newSession(config SessionConfig) (*Session, error) {
 			handleCDCACMChannel(d)
 		case "camera-mjpeg",
 			"camera-h264":
+			if d.Label() == "camera-h264" && (!d.Ordered() || d.MaxRetransmits() != nil || d.MaxPacketLifeTime() != nil) {
+				d.Close()
+				return
+			}
 			var cameraChannelID uint64
 			if virtualVideo != nil {
 				cameraChannelID = virtualVideo.BeginChannel()

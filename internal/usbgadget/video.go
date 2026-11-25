@@ -145,3 +145,46 @@ var videoLinksConfig = gadgetConfigItem{
 		},
 	},
 }
+
+// Separate function instances avoid rewriting descriptors locked by configfs
+// class links. Only one UVC function is linked into the composite gadget.
+func h264VideoConfig(item gadgetConfigItem) gadgetConfigItem {
+	item.device = "uvc.h264"
+	item.path = append([]string(nil), item.path...)
+	if len(item.path) > 1 {
+		item.path[1] = "uvc.h264"
+	}
+	if item.configPath != nil {
+		item.configPath = []string{"uvc.h264"}
+	}
+	return item
+}
+
+var videoStreamingH264Config = gadgetConfigItem{
+	order: 5003, device: "uvc.usb0",
+	path: []string{"functions", "uvc.usb0", "streaming", "framebased", "h"},
+	attrs: gadgetAttributes{
+		"bDefaultFrameIndex": "1",
+		// Standard H264 GUID; the vendor kernel defaults to this value too.
+		"guidFormat": "H264\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71",
+	},
+}
+var videoStreamingH264480Config = gadgetConfigItem{
+	order: 5004, device: "uvc.usb0",
+	path: []string{"functions", "uvc.usb0", "streaming", "framebased", "h", "480p"},
+	attrs: gadgetAttributes{
+		"wWidth": "640", "wHeight": "480",
+		"dwMinBitRate": "100000", "dwMaxBitRate": "8000000",
+		"dwDefaultFrameInterval": uvcFrameInterval15FPS,
+		"dwFrameInterval":        uvcFrameInterval15FPS, "dwBytesPerLine": "0",
+	},
+}
+var videoH264LinksConfig = func() gadgetConfigItem {
+	item := videoLinksConfig
+	item.symlinks = append([]gadgetSymlink(nil), item.symlinks...)
+	item.symlinks[1] = gadgetSymlink{
+		path:   []string{"streaming", "header", "h", "m"},
+		target: []string{"streaming", "framebased", "h"},
+	}
+	return item
+}()

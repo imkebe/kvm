@@ -90,6 +90,14 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 	"video_streaming_header":      videoStreamingHeaderConfig,
 	"video_streaming_class_fs":    videoStreamingClassFSConfig,
 	"video_links":                 videoLinksConfig,
+	"video_h264_base":             h264VideoConfig(videoBaseConfig),
+	"video_h264_control_header":   h264VideoConfig(videoControlHeaderConfig),
+	"video_h264_control_class_fs": h264VideoConfig(videoControlClassFSConfig),
+	"video_h264_format":           h264VideoConfig(videoStreamingH264Config),
+	"video_h264_480":              h264VideoConfig(videoStreamingH264480Config),
+	"video_h264_header":           h264VideoConfig(videoStreamingHeaderConfig),
+	"video_h264_class_fs":         h264VideoConfig(videoStreamingClassFSConfig),
+	"video_h264_links":            h264VideoConfig(videoH264LinksConfig),
 }
 
 func init() {
@@ -111,6 +119,9 @@ func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
 // isBaseGadgetConfigItemEnabled is the enabled state of an item that does
 // not depend on the endpoint plan.
 func (u *UsbGadget) isBaseGadgetConfigItemEnabled(itemKey string) bool {
+	if strings.HasPrefix(itemKey, "video_h264_") {
+		return u.enabledDevices.Video && u.customConfig.VideoCodec == "h264"
+	}
 	// The MJPEG frame items, one for each of VideoFrameSizes.
 	if strings.HasPrefix(itemKey, "video_streaming_mjpeg_") {
 		size := u.customConfig.VideoSize

@@ -12,6 +12,7 @@ import {
 import {
   CameraDevicePreview,
   CameraSourceSelect,
+  CameraCodecSelect,
   CameraFormatSelect,
 } from "@components/CameraDevicePreview";
 
@@ -38,6 +39,7 @@ export function VirtualVideoSetting() {
         </p>
       )}
       <CameraSourceSelect />
+      <CameraCodecSelect />
       <SettingsItem
         title="Transport"
         description="H.264 uses ordered WebRTC; MJPEG automatic uses the WebSocket and falls back to WebRTC"

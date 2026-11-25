@@ -22,6 +22,45 @@ export const usbFrameSizes = [
 ];
 export const usbFrameRates = [5, 10, 15, 20, 24, 25, 30];
 
+export function CameraCodecSelect() {
+  const id = useId();
+  const { config, setConfig, running, busy } = useVirtualCamera();
+  return (
+    <div className="space-y-1">
+      <label className="text-sm font-medium" htmlFor={id}>
+        Camera output
+      </label>
+      <SelectMenuBasic
+        id={id}
+        size="SM"
+        value={config.codec}
+        disabled={running || busy}
+        onChange={event => {
+          setConfig(previous => ({
+            ...previous,
+            output: "usb",
+            codec: event.target.value === "h264" ? "h264" : "mjpeg",
+            transport: "auto",
+            width: 640,
+            height: 480,
+            fps: 15,
+          }));
+        }}
+        options={[
+          { value: "mjpeg", label: "USB camera · MJPEG · compatible" },
+          { value: "h264", label: "USB camera · H.264 · experimental" },
+        ]}
+      />
+      {config.codec === "h264" && (
+        <p className="text-xs text-amber-700 dark:text-amber-300">
+          Requires H.264 support in the target app. Choose MJPEG if it cannot open the camera.
+          Changing format reconnects the USB devices.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // The frame size and rate of the MJPEG USB camera. With one size or rate the
 // camera offers nothing else, so the target computer cannot pick another.
 export function CameraFormatSelect() {

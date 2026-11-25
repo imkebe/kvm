@@ -1,11 +1,50 @@
 package usbgadget
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/sourcegraph/tf-dag/dag"
 )
+
+func TestCameraFunctionLinkFollowsDescriptorsWithoutNetwork(t *testing.T) {
+	for _, codec := range []string{"mjpeg", "h264"} {
+		t.Run(codec, func(t *testing.T) {
+			u := NewUsbGadget("test", &Devices{Video: true, Keyboard: true, Audio: true}, &Config{VideoCodec: codec}, nil)
+			u.udc = "test.usb"
+			if err := u.newUsbGadgetTransaction(true); err != nil {
+				t.Fatal(err)
+			}
+			tx := u.tx
+			tx.WriteGadgetConfig()
+			tx.addFileChange("gadget-finalize", *tx.reorderSymlinkChanges)
+			r := ChangeSetResolver{changeset: tx.c, g: &dag.AcyclicGraph{}, l: tx.log}
+			changes, err := r.GetChanges()
+			if err != nil {
+				t.Fatal(err)
+			}
+			function := "uvc.usb0"
+			if codec == "h264" {
+				function = "uvc.h264"
+			}
+			prefix := filepath.Join(tx.kvmGadgetPath, "functions", function) + "/"
+			linkIndex, lastDescriptor, descriptors := -1, -1, 0
+			for i, change := range changes {
+				if change.Key == "reorder-symlinks" {
+					linkIndex = i
+				}
+				if change.When == "" && strings.HasPrefix(change.Path, prefix) {
+					lastDescriptor = i
+					descriptors++
+				}
+			}
+			if linkIndex < 0 || descriptors == 0 || lastDescriptor >= linkIndex {
+				t.Fatalf("camera linked at %d before descriptor %d (count %d)", linkIndex, lastDescriptor, descriptors)
+			}
+		})
+	}
+}
 
 // Rebinding while a disabled function's symlink is still present enumerates
 // it on the host, and removing it afterwards makes configfs unbind the gadget

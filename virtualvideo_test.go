@@ -41,6 +41,36 @@ func TestParseVirtualVideoFrameRejectsOversize(t *testing.T) {
 		t.Fatalf("expected oversize error")
 	}
 }
+
+func TestVideoCodecConfiguration(t *testing.T) {
+	m := newVirtualVideoManager()
+	cfg := defaultVirtualVideoConfig()
+	cfg.Codec = "h264"
+	state, err := m.SetConfig(cfg)
+	if err != nil || state.Codec != "h264" {
+		t.Fatalf("H264: %v %v", state, err)
+	}
+	cfg.Transport = "webtransport-quic"
+	if state, err = m.SetConfig(cfg); err != nil || state.Transport != "auto" {
+		t.Fatalf("saved WebTransport choice not read as auto: %v %v", state.Transport, err)
+	}
+	cfg.Transport = "quic"
+	if _, err = m.SetConfig(cfg); err == nil {
+		t.Fatal("unknown transport accepted")
+	}
+	if m.State().Codec != "h264" {
+		t.Fatal("failed change altered active codec")
+	}
+	cfg.Transport = "rtc-datachannel"
+	cfg.Codec = "unknown"
+	if _, err = m.SetConfig(cfg); err == nil {
+		t.Fatal("unknown codec accepted")
+	}
+	cfg.Codec = "mjpeg"
+	if _, err = m.SetConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+}
 func TestVideoFrameProtocolFlags(t *testing.T) {
 	for _, tc := range []struct {
 		version, flags uint16
