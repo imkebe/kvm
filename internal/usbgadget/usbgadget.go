@@ -90,6 +90,8 @@ type UsbGadget struct {
 	absMouseButtons uint8
 	absMouseX       int
 	absMouseY       int
+	// absMouseKnown: a position was reported since the function came up.
+	absMouseKnown   bool
 	relMouseHidFile *os.File
 	relMouseLock    sync.Mutex
 	relMouseButtons uint8

@@ -245,11 +245,28 @@ func runJiggler(ctx context.Context) {
 			if rand.Intn(2) == 0 {
 				dy = -dy
 			}
-			err := rpcRelMouseReport(dx, dy, 0)
-			if err != nil {
+			if err := jiggleMouse(dx, dy); err != nil {
 				logger.Warn().Msgf("Failed to jiggle mouse: %v", err)
+			} else if currentSession != nil && (gadget.HasRelativeMouse() || gadget.HasAbsoluteMouse()) {
+				// The USB card's jiggler button pulses on it.
+				writeJSONRPCEvent("jigglerJiggled", nil, currentSession)
 			}
 		}
+	}
+}
+
+// jiggleMouse moves the pointer a little: with the relative mouse, or, when
+// that USB function is off, with the absolute mouse (a step away and back;
+// one absolute unit is about 1/17 pixel on a 1920-pixel-wide screen).
+func jiggleMouse(dx, dy int8) error {
+	switch {
+	case gadget.HasRelativeMouse():
+		return rpcRelMouseReport(dx, dy, 0)
+	case gadget.HasAbsoluteMouse():
+		return rpcHidReport(func() error { return gadget.AbsMouseJiggle(int(dx)*20, int(dy)*20) })
+	default:
+		logger.Debug().Msg("no mouse USB function to jiggle with")
+		return nil
 	}
 }
 
