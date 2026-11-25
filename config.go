@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jetkvm/kvm/internal/confparser"
 	"github.com/jetkvm/kvm/internal/logging"
@@ -63,11 +64,45 @@ type KeyboardMacro struct {
 	Name      string              `json:"name"`
 	Steps     []KeyboardMacroStep `json:"steps"`
 	SortOrder int                 `json:"sortOrder,omitempty"`
+	// Tags group macros for filtering, such as "windows" or "macos";
+	// lower case, no duplicates.
+	Tags []string `json:"tags,omitempty"`
+}
+
+const (
+	MaxTagsPerMacro = 8
+	MaxTagLength    = 20
+)
+
+// normalizeMacroTags trims and lower-cases tags and drops empty ones and
+// duplicates.
+func normalizeMacroTags(tags []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, tag := range tags {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag == "" || seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		out = append(out, tag)
+	}
+	return out
 }
 
 func (m *KeyboardMacro) Validate() error {
 	if m.Name == "" {
 		return fmt.Errorf("macro name cannot be empty")
+	}
+
+	m.Tags = normalizeMacroTags(m.Tags)
+	if len(m.Tags) > MaxTagsPerMacro {
+		return fmt.Errorf("too many tags (max %d)", MaxTagsPerMacro)
+	}
+	for _, tag := range m.Tags {
+		if utf8.RuneCountInString(tag) > MaxTagLength {
+			return fmt.Errorf("tag %q is too long (max %d characters)", tag, MaxTagLength)
+		}
 	}
 
 	if len(m.Steps) == 0 {

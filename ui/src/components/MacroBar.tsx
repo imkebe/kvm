@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { LuCommand } from "react-icons/lu";
 
-import { useMacrosStore } from "@hooks/stores";
+import { useMacrosStore, useSettingsStore } from "@hooks/stores";
+import { MacroTagFilter, allMacroTags, macroMatches } from "@components/MacroTags";
 import useKeyboard from "@hooks/useKeyboard";
 import { useJsonRpc } from "@hooks/useJsonRpc";
 import { Button } from "@components/Button";
@@ -11,6 +12,15 @@ export default function MacroBar() {
   const { macros, initialized, loadMacros, setSendFn } = useMacrosStore();
   const { executeMacro } = useKeyboard();
   const { send } = useJsonRpc();
+  const macroBarTag = useSettingsStore(state => state.macroBarTag);
+  const setMacroBarTag = useSettingsStore(state => state.setMacroBarTag);
+  const tags = useMemo(() => allMacroTags(macros), [macros]);
+  // A tag no longer in use shows all macros.
+  const activeTag = macroBarTag && tags.includes(macroBarTag) ? macroBarTag : null;
+  const shown = useMemo(
+    () => macros.filter(macro => macroMatches(macro, activeTag)),
+    [macros, activeTag],
+  );
 
   useEffect(() => {
     setSendFn(send);
@@ -30,8 +40,14 @@ export default function MacroBar() {
         <div className="absolute -ml-5">
           <LuCommand className="h-4 w-4 text-slate-500" />
         </div>
-        <div className="flex flex-wrap gap-2">
-          {macros.map(macro => (
+        <div className="flex flex-wrap items-center gap-2">
+          {tags.length > 0 && (
+            <>
+              <MacroTagFilter tags={tags} value={activeTag} onChange={setMacroBarTag} size="xs" />
+              <div className="h-4 w-px bg-slate-800/20 dark:bg-slate-300/20" />
+            </>
+          )}
+          {shown.map(macro => (
             <Button
               key={macro.id}
               aria-label={macro.name}

@@ -1224,11 +1224,21 @@ func setKeyboardMacros(params KeyboardMacrosParams) (any, error) {
 			}
 		}
 
+		var tags []string
+		if tagsArray, ok := macroMap["tags"].([]any); ok {
+			for _, t := range tagsArray {
+				if tag, ok := t.(string); ok {
+					tags = append(tags, tag)
+				}
+			}
+		}
+
 		macro := KeyboardMacro{
 			ID:        id,
 			Name:      name,
 			Steps:     steps,
 			SortOrder: sortOrder,
+			Tags:      tags,
 		}
 
 		if err := macro.Validate(); err != nil {

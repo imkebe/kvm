@@ -520,6 +520,11 @@ export interface SettingsState {
   debugMode: boolean;
   setDebugMode: (enabled: boolean) => void;
 
+
+  // The macro bar shows only macros with this tag (null: all).
+  macroBarTag: string | null;
+  setMacroBarTag: (tag: string | null) => void;
+
   // Add new developer mode state
   developerMode: boolean;
   setDeveloperMode: (enabled: boolean) => void;
@@ -573,6 +578,10 @@ export const useSettingsStore = create(
 
       debugMode: import.meta.env.DEV,
       setDebugMode: (enabled: boolean) => set({ debugMode: enabled }),
+
+
+      macroBarTag: null,
+      setMacroBarTag: (tag: string | null) => set({ macroBarTag: tag }),
 
       // Add developer mode with default value
       developerMode: false,
@@ -1124,6 +1133,8 @@ export interface KeySequence {
   name: string;
   steps: KeySequenceStep[];
   sortOrder?: number;
+  // For filtering, such as "windows" or "macos"; lower case.
+  tags?: string[];
 }
 
 export interface MacrosState {

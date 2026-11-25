@@ -3,3 +3,5 @@ export const MAX_STEPS_PER_MACRO = 10;
 export const MAX_KEYS_PER_STEP = 10;
 export const MAX_TOTAL_MACROS = 25;
 export const COPY_SUFFIX = "(copy)";
+export const MAX_TAGS_PER_MACRO = 8;
+export const MAX_TAG_LENGTH = 20;
