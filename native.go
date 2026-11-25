@@ -45,6 +45,11 @@ func initNative(systemVersion *semver.Version, appVersion *semver.Version) {
 			wakeDisplay(false, "indev_event")
 		},
 		OnRpcEvent: func(event string) {
+			// The screen tells whether it shows statistics.
+			if event == "homeStats" || event == "homeIdle" {
+				homeStatisticsShown(event == "homeStats")
+				return
+			}
 			nativeCmdLock.Lock()
 			defer nativeCmdLock.Unlock()
 

@@ -40,16 +40,6 @@ func switchToMainScreen() {
 	}
 }
 
-func updateDisplayUsbState() {
-	if usbState == "configured" {
-		nativeInstance.UpdateLabelIfChanged("usb_status_label", "Connected")
-		_, _ = nativeInstance.UIObjAddState("usb_status_label", "LV_STATE_CHECKED")
-	} else {
-		nativeInstance.UpdateLabelIfChanged("usb_status_label", "Disconnected")
-		_, _ = nativeInstance.UIObjClearState("usb_status_label", "LV_STATE_CHECKED")
-	}
-}
-
 func updateDisplay() {
 	if networkManager != nil {
 		nativeInstance.UpdateLabelIfChanged("home_info_ipv4_addr", networkManager.IPv4String())
@@ -67,15 +57,7 @@ func updateDisplay() {
 		nativeInstance.UpdateLabelIfChanged("dhcp_client_change_label", "Change to JetKVM")
 	}
 
-	updateDisplayUsbState()
-
-	if lastVideoState.Ready {
-		nativeInstance.UpdateLabelIfChanged("hdmi_status_label", "Connected")
-		_, _ = nativeInstance.UIObjAddState("hdmi_status_label", "LV_STATE_CHECKED")
-	} else {
-		nativeInstance.UpdateLabelIfChanged("hdmi_status_label", "Disconnected")
-		_, _ = nativeInstance.UIObjClearState("hdmi_status_label", "LV_STATE_CHECKED")
-	}
+	updateHomeScreen()
 	nativeInstance.UpdateLabelIfChanged("cloud_status_label", fmt.Sprintf("%d active", actionSessions))
 
 	if networkManager != nil && networkManager.IsUp() {
@@ -243,6 +225,7 @@ func updateStaticContents() {
 func configureDisplayOnNativeRestart() {
 	displayLogger.Info().Msg("native restarted, configuring display")
 	updateStaticContents()
+	homeScreenResend()
 	requestDisplayUpdate(true, "native_restart")
 }
 
@@ -377,10 +360,11 @@ func initDisplay() {
 		displayLogger.Info().Msg("setting initial display contents")
 		time.Sleep(500 * time.Millisecond)
 		updateStaticContents()
-		updateDisplayUsbState()
+		updateHomeScreen()
 		displayInited = true
 		displayLogger.Info().Msg("display inited")
 		startBacklightTickers()
+		go homeScreenTicker()
 		requestDisplayUpdate(true, "init_display")
 	}()
 }

@@ -1607,6 +1607,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getDisplayRotation":         {Func: rpcGetDisplayRotation},
 	"setBacklightSettings":       {Func: rpcSetBacklightSettings, Params: []string{"params"}},
 	"getBacklightSettings":       {Func: rpcGetBacklightSettings},
+	"setDisplayCard":             {Func: rpcSetDisplayCard, Params: []string{"index"}},
 	"setAudioConfig":             {Func: rpcSetAudioConfig, Params: []string{"params"}},
 	"getAudioConfig":             {Func: rpcGetAudioConfig},
 	"getDCPowerState":            {Func: rpcGetDCPowerState},

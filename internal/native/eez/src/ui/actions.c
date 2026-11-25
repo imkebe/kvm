@@ -20,6 +20,15 @@ int handle_gesture_screen_switch(lv_event_t *e, lv_dir_t direction, int screenId
 }
 
 void handle_gesture_main_screen_switch(lv_event_t *e, lv_dir_t direction) {
+    // A swipe up or to the right leaves the menu. Other events, such as a
+    // press of the back button, leave it too.
+    if (lv_event_get_code(e) == LV_EVENT_GESTURE) {
+        lv_dir_t swipe = lv_indev_get_gesture_dir(lv_indev_get_act());
+        if (swipe != direction && swipe != LV_DIR_RIGHT) {
+            return;
+        }
+        lv_indev_wait_release(lv_indev_get_act());
+    }
     const char *main_screen = get_var_main_screen();
     if (strcmp(main_screen, "home_screen") == 0) {   
         loadScreen(SCREEN_ID_HOME_SCREEN);
@@ -57,7 +66,7 @@ void action_switch_to_reboot(lv_event_t *e) {
 }
 
 void action_menu_screen_gesture(lv_event_t * e) {
-    handle_gesture_main_screen_switch(e, LV_DIR_RIGHT);
+    handle_gesture_main_screen_switch(e, LV_DIR_TOP);
 }
 
 void action_menu_advanced_screen_gesture(lv_event_t * e) {
@@ -69,7 +78,8 @@ void action_reset_config_screen_gesture(lv_event_t * e) {
 }
 
 void action_home_screen_gesture(lv_event_t * e) {
-    handle_gesture_screen_switch(e, LV_DIR_LEFT, SCREEN_ID_MENU_SCREEN);
+    // The menu comes down from the top: sideways swipes turn the cards.
+    handle_gesture_screen_switch(e, LV_DIR_BOTTOM, SCREEN_ID_MENU_SCREEN);
 }
 
 void action_about_screen_gesture(lv_event_t * e) {

@@ -6,7 +6,7 @@ CONFIG_LV_USE_OBJ_PROPERTY=y
 CONFIG_LV_USE_OBJ_PROPERTY_NAME=y
 CONFIG_LV_USE_PRIVATE_API=y
 # CONFIG_LV_USE_CALENDAR is not set
-# CONFIG_LV_USE_CHART is not set
+CONFIG_LV_USE_CHART=y
 # CONFIG_LV_USE_CHECKBOX is not set
 # CONFIG_LV_USE_MSGBOX is not set
 # CONFIG_LV_USE_ROLLER is not set
@@ -21,3 +21,6 @@ CONFIG_LV_USE_EVDEV=y
 CONFIG_LV_USE_ST7789=y
 CONFIG_LV_BUILD_EXAMPLES=n
 CONFIG_LV_BUILD_DEMOS=n
+# The home screen adds the statistics cards and the USB function list: the
+# default pool of 64 KiB is too small for them.
+CONFIG_LV_MEM_SIZE_KILOBYTES=256
