@@ -33,6 +33,7 @@
     "access_private_key_label": "Private Key",
     "access_provider_custom": "Custom",
     "access_provider_jetkvm": "JetKVM Cloud",
+    "access_provider_jetkvm_unsupported": "JetKVM Cloud (not supported)",
     "access_remote_description": "Manage the mode of Remote access to the device",
     "access_security_encryption": "End-to-end encryption using WebRTC (DTLS and SRTP)",
     "access_security_oidc": "OIDC (OpenID Connect) authentication",
