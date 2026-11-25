@@ -701,19 +701,34 @@ export const useSettingsStore = create(
 );
 
 export interface RemoteVirtualMediaState {
-  source: "HTTP" | "Storage" | "Builtin" | null;
+  source:
+    | "HTTP"
+    | "Storage"
+    | "Builtin"
+    | "Browser" // a folder served from the browser tab
+    | null;
   mode: "CDROM" | "Disk" | null;
   filename: string | null;
   url: string | null;
   path: string | null;
   size: number | null;
+  // The folder image a browser serves (source "Browser").
+  image_id?: string;
 }
 
 export interface MountMediaState {
   remoteVirtualMediaState: RemoteVirtualMediaState | null;
   setRemoteVirtualMediaState: (state: MountMediaState["remoteVirtualMediaState"]) => void;
 
-  modalView: "mode" | "url" | "device" | "upload" | "download" | "error" | null;
+  modalView:
+    | "mode"
+    | "url"
+    | "device"
+    | "folder" // a folder from the browser
+    | "upload"
+    | "download"
+    | "error"
+    | null;
   setModalView: (view: MountMediaState["modalView"]) => void;
 
   isMountMediaDialogOpen: boolean;

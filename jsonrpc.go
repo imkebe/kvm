@@ -1682,6 +1682,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getStorageSpace":            {Func: rpcGetStorageSpace},
 	"mountWithHTTP":              {Func: rpcMountWithHTTP, Params: []string{"url", "mode"}},
 	"mountWithStorage":           {Func: rpcMountWithStorage, Params: []string{"filename", "mode"}},
+	"mountWithBrowser":           {Func: rpcMountWithBrowser, Params: []string{"name", "size", "imageId"}},
 	"listStorageFiles":           {Func: rpcListStorageFiles},
 	"deleteStorageFile":          {Func: rpcDeleteStorageFile, Params: []string{"filename"}},
 	"startStorageFileUpload":     {Func: rpcStartStorageFileUpload, Params: []string{"filename", "size"}},

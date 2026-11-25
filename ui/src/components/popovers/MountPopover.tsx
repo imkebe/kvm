@@ -1,6 +1,6 @@
 import { PlusCircleIcon } from "@heroicons/react/20/solid";
 import { forwardRef, useEffect, useCallback } from "react";
-import { LuDisc, LuLink, LuPlus, LuRadioReceiver } from "react-icons/lu";
+import { LuDisc, LuFolderOpen, LuLink, LuPlus, LuRadioReceiver } from "react-icons/lu";
 import { useClose } from "@headlessui/react";
 import { useLocation } from "react-router";
 
@@ -13,6 +13,7 @@ import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
 import { useDeviceUiNavigation } from "@hooks/useAppNavigation";
 import { useVideoStreamPause } from "@hooks/useVideoStreamPause";
+import { useFolderMountStore } from "@hooks/useFolderMount";
 import notifications from "@/notifications";
 
 const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
@@ -20,6 +21,7 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
   const { send } = useJsonRpc();
   const { remoteVirtualMediaState, setModalView, setRemoteVirtualMediaState } =
     useMountMediaStore();
+  const folder = useFolderMountStore();
 
   const syncRemoteVirtualMediaState = useCallback(() => {
     send("getVirtualMediaState", {}, (response: JsonRpcResponse) => {
@@ -115,6 +117,52 @@ const MountPopopover = forwardRef<HTMLDivElement, object>((_props, ref) => {
             </p>
           </div>
         );
+      case "Browser": {
+        const servedHere =
+          folder.image !== null && folder.image.id === remoteVirtualMediaState.image_id;
+        return (
+          <div className="">
+            <div className="mb-0 inline-block">
+              <Card>
+                <div className="p-1">
+                  <LuFolderOpen className="h-4 w-4 shrink-0 text-blue-700 dark:text-blue-500" />
+                </div>
+              </Card>
+            </div>
+            <h3 className="text-base font-semibold text-black dark:text-white">
+              {m.mount_mounted_folder()}
+            </h3>
+            <p className="text-sm text-slate-900 dark:text-slate-100">
+              {formatters.truncateMiddle(filename, 30)}
+            </p>
+            <p className="text-sm text-slate-900 dark:text-slate-100">
+              {formatters.bytes(size ?? 0)}
+            </p>
+            <p
+              className={
+                "mt-1 text-xs " +
+                (servedHere && !folder.connected
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-slate-600 dark:text-slate-400")
+              }
+            >
+              {!servedHere
+                ? m.mount_folder_served_elsewhere()
+                : folder.connected
+                  ? m.mount_folder_served_here()
+                  : m.mount_folder_reconnecting()}
+            </p>
+            {servedHere && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {m.mount_folder_stats({
+                  reads: folder.reads,
+                  bytes: formatters.bytes(folder.bytes),
+                })}
+              </p>
+            )}
+          </div>
+        );
+      }
       case "Builtin":
         return (
           <div className="">

@@ -314,6 +314,8 @@ const (
 	Storage VirtualMediaSource = "Storage"
 	// Builtin is a disc the firmware makes: the OS Services installer.
 	Builtin VirtualMediaSource = "Builtin"
+	// Browser is a folder served by a browser tab, see virtual_media_browser.go.
+	Browser VirtualMediaSource = "Browser"
 )
 
 type VirtualMediaMode string
@@ -329,6 +331,8 @@ type VirtualMediaState struct {
 	Filename string             `json:"filename,omitempty"`
 	URL      string             `json:"url,omitempty"`
 	Size     int64              `json:"size"`
+	// ImageID names the folder image a browser serves (Source Browser).
+	ImageID string `json:"image_id,omitempty"`
 }
 
 var currentVirtualMediaState *VirtualMediaState
@@ -353,7 +357,11 @@ func unmountImageLocked() error {
 		nbdDevice.Close()
 		nbdDevice = nil
 	}
+	wasBrowser := currentVirtualMediaState != nil && currentVirtualMediaState.Source == Browser
 	currentVirtualMediaState = nil
+	if wasBrowser {
+		browserDiskUnmounted()
+	}
 	return nil
 }
 
@@ -479,7 +487,18 @@ func rpcMountWithHTTP(url string, mode VirtualMediaMode) error {
 	if err := prepareHTTPMount(url, mode); err != nil {
 		return err
 	}
+	if err := startNBDMount(); err != nil {
+		return err
+	}
+	if mqttManager != nil {
+		mqttManager.publishVirtualMediaState()
+	}
+	return nil
+}
 
+// startNBDMount starts the NBD device for the prepared state and hands it to
+// the USB mass storage function.
+func startNBDMount() error {
 	logger.Debug().Msg("Starting nbd device")
 	nbdDevice = NewNBDDevice()
 	err := nbdDevice.Start()
@@ -495,9 +514,6 @@ func rpcMountWithHTTP(url string, mode VirtualMediaMode) error {
 		return err
 	}
 	logger.Info().Msg("usb mass storage mounted")
-	if mqttManager != nil {
-		mqttManager.publishVirtualMediaState()
-	}
 	return nil
 }
 
