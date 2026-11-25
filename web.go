@@ -189,6 +189,11 @@ func setupRouter() *gin.Engine {
 	r.GET(osServicesTerminalWSPath, terminalAuth, handleOSServicesTerminalWebSocket)
 	r.GET(osServicesTerminalStatusPath, terminalAuth, handleOSServicesTerminalStatus)
 	r.POST(deviceAPIPath, apiAuthMiddleware(APIScopeDevice, "JetKVM device API"), handleDeviceAPI)
+	// The MCP server checks its token itself (mcp_server.go).
+	r.POST(mcpServerPath, handleMCPServer)
+	r.GET(mcpServerPath, handleMCPServer)
+	r.DELETE(mcpServerPath, handleMCPServer)
+
 	// Developer mode protected routes
 	developerModeRouter := r.Group("/developer/")
 	developerModeRouter.Use(basicAuthProtectedMiddleware(true))

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jetkvm/kvm/internal/osservices"
 	"github.com/jetkvm/kvm/internal/usbgadget"
 )
 
@@ -152,4 +153,64 @@ var (
 func noteDeviceAPICall() {
 	deviceAPICalls.Add(1)
 	deviceAPILastCall.Store(time.Now().UnixMilli())
+}
+
+// McpActivity is what the device status popover shows about the APIs.
+type McpActivity struct {
+	MCPEnabled         bool   `json:"mcp_enabled"`
+	MCPSessions        int    `json:"mcp_sessions"`
+	DeviceAPIEnabled   bool   `json:"device_api_enabled"`
+	TerminalAPIEnabled bool   `json:"terminal_api_enabled"`
+	TerminalReady      bool   `json:"terminal_ready"`
+	Tokens             int    `json:"tokens"`
+	TokensExpired      int    `json:"tokens_expired"`
+	TokensActive       int    `json:"tokens_active"` // used in the last hour
+	LastTokenUse       int64  `json:"last_token_use"`
+	LastTokenName      string `json:"last_token_name,omitempty"`
+	DeviceAPICalls     uint64 `json:"device_api_calls"`
+	DeviceAPILastCall  int64  `json:"device_api_last_call"`
+	APIShells          int    `json:"api_shells"`
+	Shells             int    `json:"shells"`
+}
+
+func rpcGetMcpActivity() (McpActivity, error) {
+	mcpMu.Lock()
+	sessions := len(mcpClosers)
+	mcpMu.Unlock()
+	a := McpActivity{
+		MCPEnabled:        config.MCPServerEnabled,
+		MCPSessions:       sessions,
+		DeviceAPIEnabled:  config.DeviceAPIEnabled,
+		DeviceAPICalls:    deviceAPICalls.Load(),
+		DeviceAPILastCall: deviceAPILastCall.Load(),
+	}
+	tokens, _ := rpcGetAPITokens()
+	now := apiTokenNow().Unix()
+	for _, t := range tokens {
+		a.Tokens++
+		if t.Expired {
+			a.TokensExpired++
+		}
+		if t.LastUsedAt > 0 && now-t.LastUsedAt < 3600 {
+			a.TokensActive++
+		}
+		if t.LastUsedAt > a.LastTokenUse {
+			a.LastTokenUse, a.LastTokenName = t.LastUsedAt, t.Name
+		}
+	}
+	if s := osServices; s != nil {
+		cfg := s.config()
+		a.TerminalAPIEnabled = cfg.TerminalAPIEnabled
+		s.do(func(session *osservices.Session) {
+			st := session.State()
+			a.TerminalReady = cfg.Enabled && cfg.TerminalEnabled && st.Connected && st.Terminal
+			a.Shells = len(s.terminals)
+			for _, t := range s.terminals {
+				if t.api {
+					a.APIShells++
+				}
+			}
+		})
+	}
+	return a, nil
 }

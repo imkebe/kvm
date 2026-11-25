@@ -163,6 +163,9 @@ type Config struct {
 
 	// DeviceAPIEnabled turns on POST /api/rpc (device_api.go). Off by default.
 	DeviceAPIEnabled bool `json:"device_api_enabled"`
+	// MCPServerEnabled turns on the MCP server at /mcp (mcp_server.go). Off
+	// by default.
+	MCPServerEnabled bool `json:"mcp_server_enabled"`
 	// APITokens open the device, terminal and metrics APIs (api_tokens.go).
 	APITokens        []APIToken        `json:"api_tokens,omitempty"`
 	USBNetworkConfig *USBNetworkConfig `json:"usb_network_config,omitempty"`

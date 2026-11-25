@@ -59,12 +59,14 @@ import {
   useHostInfoAvailability,
   useHostInfoStore,
 } from "@hooks/hostInfo";
+import { ApiCallEntry, useApiCallStore } from "@hooks/useApiCallStore";
 import type { VersionInfo as LocalVersion } from "@hooks/useVersion";
 import { useHiddenVideoStreamPause } from "@hooks/useHiddenVideoStreamPause";
 import WebRTCVideo from "@components/WebRTCVideo";
 import DashboardNavbar from "@components/Header";
 const ConnectionStatsSidebar = lazy(() => import("@components/sidebar/connectionStats"));
 const HostInfoSidebar = lazy(() => import("@components/sidebar/hostInfo"));
+const ApiCallsSidebar = lazy(() => import("@components/sidebar/apiCalls"));
 const Terminal = lazy(() => import("@components/Terminal"));
 const TerminalDock = lazy(() => import("@components/TerminalDock"));
 const UpdateInProgressStatusCard = lazy(() => import("@components/UpdateInProgressStatusCard"));
@@ -475,6 +477,10 @@ export default function KvmIdRoute() {
 
     if (resp.method === "hostInfoState") {
       applyHostInfoState(resp.params as unknown as HostInfoState);
+    }
+
+    if (resp.method === "apiCall") {
+      useApiCallStore.getState().push(resp.params as unknown as ApiCallEntry);
     }
 
     if (resp.method === "hostMetrics") {
@@ -1049,6 +1055,20 @@ function SidebarContainer(props: SidebarContainerProps) {
               }}
             >
               <HostInfoSidebar />
+            </motion.div>
+          )}
+          {sidebarView === "api-calls" && (
+            <motion.div
+              className="absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 0.5,
+                ease: "easeInOut",
+              }}
+            >
+              <ApiCallsSidebar />
             </motion.div>
           )}
         </AnimatePresence>
