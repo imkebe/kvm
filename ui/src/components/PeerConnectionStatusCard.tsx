@@ -24,9 +24,11 @@ type StatusProps = Record<
 export default function PeerConnectionStatusCard({
   state,
   title,
+  action,
 }: {
   state?: RTCPeerConnectionState | null;
   title?: string;
+  action?: React.ReactNode;
 }) {
   if (!state) return null;
   const StatusCardProps: StatusProps = {
@@ -63,6 +65,7 @@ export default function PeerConnectionStatusCard({
       title={title || "JetKVM Device"}
       status={PeerConnectionStatusMap[state]}
       {...StatusCardProps[state]}
+      action={state === "connected" ? action : undefined}
     />
   );
 }

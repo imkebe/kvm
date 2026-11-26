@@ -5,6 +5,7 @@ import { useDebounceValue } from "usehooks-ts";
 import { LuBookOpen, LuCopy, LuTriangleAlert } from "react-icons/lu";
 
 import { Checkbox } from "@components/Checkbox";
+import { ConfirmDialog } from "@components/ConfirmDialog";
 import Card, { GridCard } from "@components/Card";
 import { Button } from "@components/Button";
 import { guestUpdateDescription, useGuestUpdateStart } from "@components/GuestUpdateStatusCard";
@@ -148,6 +149,8 @@ function OsServicesSettingsPage() {
   // a new live mode, a new request, or a repeat of the same request starts
   // a new wait, and an expired key from an earlier mismatch never matches.
   const [resolutionRequests, setResolutionRequests] = useState(0);
+  // The video streaming switch asks first: it changes what the browser shows.
+  const [videoConfirm, setVideoConfirm] = useState<boolean | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const driftKey = mismatched
     ? `${liveResolution}/${settings.resolution}/${resolutionRequests}`
@@ -433,11 +436,35 @@ function OsServicesSettingsPage() {
                       <Checkbox
                         checked={settings.video_enabled}
                         disabled={loading}
-                        onChange={event =>
-                          update({ ...settings, video_enabled: event.target.checked })
-                        }
+                        aria-label={m.os_services_video_title()}
+                        onChange={event => setVideoConfirm(event.target.checked)}
                       />
                     </SettingsItem>
+                    <ConfirmDialog
+                      open={videoConfirm !== null}
+                      onClose={() => setVideoConfirm(null)}
+                      title={
+                        videoConfirm
+                          ? m.os_services_video_confirm_on_title()
+                          : m.os_services_video_confirm_off_title()
+                      }
+                      description={
+                        videoConfirm
+                          ? m.os_services_video_confirm_on_description()
+                          : m.os_services_video_confirm_off_description()
+                      }
+                      variant="warning"
+                      confirmText={
+                        videoConfirm
+                          ? m.os_services_video_confirm_on()
+                          : m.os_services_video_confirm_off()
+                      }
+                      onConfirm={() => {
+                        if (videoConfirm !== null)
+                          update({ ...settings, video_enabled: videoConfirm });
+                        setVideoConfirm(null);
+                      }}
+                    />
 
                     <SettingsItem
                       title={m.os_services_capture_title()}

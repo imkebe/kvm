@@ -6,6 +6,7 @@ import { LuMonitorSmartphone } from "react-icons/lu";
 
 import LogoBlueIcon from "@assets/logo-blue.svg";
 import LogoWhiteIcon from "@assets/logo-white.svg";
+import FirmwareCredit from "@components/FirmwareCredit";
 import { useHidStore, useRTCStore, useUserStore } from "@hooks/stores";
 import Card from "@components/Card";
 import Container from "@components/Container";
@@ -13,6 +14,7 @@ import { LinkButton } from "@components/Button";
 import PeerConnectionStatusCard from "@components/PeerConnectionStatusCard";
 import USBStateStatus from "@components/USBStateStatus";
 import NetbirdStatusCard from "@components/NetbirdStatusCard";
+import VideoSourceStatus from "@components/VideoSourceStatus";
 import { CLOUD_API, DEVICE_API } from "@/ui.config";
 import api from "@/api";
 import { isOnDevice } from "@/main";
@@ -61,9 +63,10 @@ export default function DashboardNavbar({
       <Container>
         <div className="flex h-14 items-center justify-between">
           <div className="flex shrink-0 items-center gap-x-8">
-            <div className="inline-block shrink-0">
+            <div className="flex shrink-0 items-center gap-x-2">
               <img src={LogoBlueIcon} alt="" className="h-6 dark:hidden" />
               <img src={LogoWhiteIcon} alt="" className="hidden h-6 dark:block" />
+              <FirmwareCredit />
             </div>
             {hostname && (
               <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
@@ -92,11 +95,19 @@ export default function DashboardNavbar({
                 {showConnectionStatus && (
                   <>
                     <div className="w-[159px]">
-                      <PeerConnectionStatusCard state={peerConnectionState} title={kvmName} />
+                      <PeerConnectionStatusCard
+                        state={peerConnectionState}
+                        title={kvmName}
+                      />
                     </div>
                     <div className="hidden w-[159px] md:block">
                       <USBStateStatus state={usbState} peerConnectionState={peerConnectionState} />
                     </div>
+                    {peerConnectionState === "connected" && (
+                      <div className="hidden w-[204px] md:block">
+                        <VideoSourceStatus />
+                      </div>
+                    )}
                     {peerConnectionState === "connected" && <NetbirdStatusCard />}
                   </>
                 )}
