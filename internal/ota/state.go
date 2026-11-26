@@ -221,7 +221,7 @@ func NewState(opts Options) *State {
 		releaseAPIEndpoint:      opts.ReleaseAPIEndpoint,
 		resetConfig:             opts.ResetConfig,
 		setAutoUpdate:           opts.SetAutoUpdate,
-		gpgVerifier:             NewGPGVerifier(opts.Logger, opts.GetHTTPClient),
+		gpgVerifier:             newUpdateVerifier(opts.Logger, opts.GetHTTPClient),
 	}
 	if !opts.SkipConfirmSystem {
 		go s.confirmCurrentSystem()
