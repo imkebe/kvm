@@ -53,9 +53,15 @@ export interface UserState {
   setUser: (user: User | null) => void;
 }
 
+export type UsbDeviceMenu = "camera" | "microphone" | "network";
+
 export interface UIState {
   sidebarView: AvailableSidebarViews | null;
   setSidebarView: (view: AvailableSidebarViews | null) => void;
+
+  // The USB device whose panel is open in the action bar.
+  usbDeviceMenu: UsbDeviceMenu | null;
+  setUsbDeviceMenu: (device: UsbDeviceMenu | null) => void;
 
   disableVideoFocusTrap: boolean;
   setDisableVideoFocusTrap: (enabled: boolean) => void;
@@ -97,6 +103,9 @@ export const useUiStore = create<UIState>(set => ({
 
   sidebarView: null,
   setSidebarView: (view: AvailableSidebarViews | null) => set({ sidebarView: view }),
+
+  usbDeviceMenu: null,
+  setUsbDeviceMenu: (device: UsbDeviceMenu | null) => set({ usbDeviceMenu: device }),
 
   disableVideoFocusTrap: false,
   setDisableVideoFocusTrap: (enabled: boolean) => set({ disableVideoFocusTrap: enabled }),

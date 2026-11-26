@@ -143,6 +143,7 @@ export default function KvmIdRoute() {
     sidebarView,
     setSidebarView,
     disableVideoFocusTrap,
+    usbDeviceMenu,
     setDisableVideoFocusTrap,
     rebootState,
     setRebootState,
@@ -871,7 +872,7 @@ export default function KvmIdRoute() {
       <div className="relative h-full">
         {!hideHeaderBar && (
           <FocusTrap
-            paused={disableVideoFocusTrap}
+            paused={disableVideoFocusTrap || usbDeviceMenu !== null}
             focusTrapOptions={{
               allowOutsideClick: true,
               escapeDeactivates: false,
