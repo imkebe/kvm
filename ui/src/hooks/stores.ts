@@ -79,6 +79,12 @@ export interface UIState {
   terminalType: AvailableTerminalTypes;
   setTerminalType: (type: UIState["terminalType"]) => void;
 
+  // A guest terminal's shell runs while this is set, whether or not its
+  // panel is shown: hiding the panel only minimizes it. Showing the guest
+  // panel starts a session; ending it (or the shell exiting) clears this.
+  guestTerminalSession: boolean;
+  endGuestTerminalSession: () => void;
+
   rebootState: { isRebooting: boolean; postRebootAction: PostRebootAction } | null;
   setRebootState: (
     state: { isRebooting: boolean; postRebootAction: PostRebootAction } | null,
@@ -101,7 +107,19 @@ export interface UIState {
 
 export const useUiStore = create<UIState>(set => ({
   terminalType: "none",
-  setTerminalType: (type: UIState["terminalType"]) => set({ terminalType: type }),
+  setTerminalType: (type: UIState["terminalType"]) =>
+    set(
+      type === "guest"
+        ? { terminalType: type, guestTerminalSession: true }
+        : { terminalType: type },
+    ),
+
+  guestTerminalSession: false,
+  endGuestTerminalSession: () =>
+    set(state => ({
+      guestTerminalSession: false,
+      terminalType: state.terminalType === "guest" ? "none" : state.terminalType,
+    })),
 
   sidebarView: null,
   setSidebarView: (view: AvailableSidebarViews | null) => set({ sidebarView: view }),
@@ -561,6 +579,10 @@ export interface SettingsState {
   debugMode: boolean;
   setDebugMode: (enabled: boolean) => void;
 
+  // Paste types the text as keystrokes even when OS Services could paste it
+  // through the computer's clipboard (for a locked screen, for example).
+  pasteAsKeystrokes: boolean;
+  setPasteAsKeystrokes: (enabled: boolean) => void;
 
   // The macro bar shows only macros with this tag (null: all).
   macroBarTag: string | null;
@@ -620,6 +642,8 @@ export const useSettingsStore = create(
       debugMode: import.meta.env.DEV,
       setDebugMode: (enabled: boolean) => set({ debugMode: enabled }),
 
+      pasteAsKeystrokes: false,
+      setPasteAsKeystrokes: (enabled: boolean) => set({ pasteAsKeystrokes: enabled }),
 
       macroBarTag: null,
       setMacroBarTag: (tag: string | null) => set({ macroBarTag: tag }),

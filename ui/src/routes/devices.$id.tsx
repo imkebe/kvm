@@ -66,6 +66,7 @@ import DashboardNavbar from "@components/Header";
 const ConnectionStatsSidebar = lazy(() => import("@components/sidebar/connectionStats"));
 const HostInfoSidebar = lazy(() => import("@components/sidebar/hostInfo"));
 const Terminal = lazy(() => import("@components/Terminal"));
+const TerminalDock = lazy(() => import("@components/TerminalDock"));
 const UpdateInProgressStatusCard = lazy(() => import("@components/UpdateInProgressStatusCard"));
 import Modal from "@components/Modal";
 import GuestFileTransferStatusCard from "@components/GuestFileTransferStatusCard";
@@ -736,16 +737,18 @@ export default function KvmIdRoute() {
   }, [peerConnection, shell, setTerminalChannel]);
 
   // A guest terminal channel is a shell running on the guest, so it exists
-  // only while the panel is shown: hiding the panel ends the shell, and a
-  // shell that ends collapses the panel, with the KVM's closing line as a
+  // only while a guest terminal session does: hiding the panel minimizes it
+  // and the shell keeps running; ending the session closes the channel, and
+  // a shell that ends collapses the panel, with the KVM's closing line as a
   // notice. Only a device with OS Services has one.
   const osServices = useCapability("os_services");
-  const terminalType = useUiStore(state => state.terminalType);
-  const setTerminalType = useUiStore(state => state.setTerminalType);
+  const guestTerminalSession = useUiStore(state => state.guestTerminalSession);
+  const endGuestTerminalSession = useUiStore(state => state.endGuestTerminalSession);
+  const guestTerminalShown = useUiStore(state => state.terminalType === "guest");
   const [guestTerminalChannel, setGuestTerminalChannel] = useState<RTCDataChannel | null>(null);
   const guestTerminalBacklog = useRef<(string | ArrayBuffer | Blob)[]>([]);
   useEffect(() => {
-    if (terminalType !== "guest" || !peerConnection || !osServices) return;
+    if (!guestTerminalSession || !peerConnection || !osServices) return;
     const channel = peerConnection.createDataChannel("guest-terminal");
     // Shell output is binary; as array buffers it is written in the order
     // it arrived, which a Blob's asynchronous read would not keep.
@@ -769,7 +772,7 @@ export default function KvmIdRoute() {
     channel.onclose = () => {
       if (closingLine === "The shell exited") notifications.success(closingLine);
       else notifications.error(closingLine ?? m.guest_terminal_closed());
-      setTerminalType("none");
+      endGuestTerminalSession();
     };
     return () => {
       // A channel this effect has given up must not report in later.
@@ -779,7 +782,7 @@ export default function KvmIdRoute() {
       channel.close();
       setGuestTerminalChannel(null);
     };
-  }, [terminalType, peerConnection, osServices, setTerminalType]);
+  }, [guestTerminalSession, peerConnection, osServices, endGuestTerminalSession]);
 
   // Register E2E test hooks
   useEffect(() => {
@@ -975,6 +978,9 @@ export default function KvmIdRoute() {
           title={m.guest_terminal()}
         />
       )}
+
+      {/* The minimized guest terminal, to open again and to watch. */}
+      {guestTerminalChannel && !guestTerminalShown && <TerminalDock />}
 
       {serialConsole && (
         <Terminal type="serial" dataChannel={serialConsole} title={m.serial_console()} />

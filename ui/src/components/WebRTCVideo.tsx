@@ -54,6 +54,10 @@ function isClipboardChord(e: KeyboardEvent) {
   );
 }
 
+// How long a paste chord waits for the browser's own `paste` event before
+// taking the fallback. Browsers that map the chord to paste fire it at once.
+const pasteEventWaitMs = 200;
+
 function isEditableTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null;
   return (
@@ -74,6 +78,8 @@ export default function WebRTCVideo({
   const audioElm = useRef<HTMLAudioElement>(null);
   const fullscreenContainerRef = useRef<HTMLDivElement>(null);
   const overlaysRef = useRef<HTMLDivElement>(null);
+  // Set by a paste chord, cleared by the `paste` event it produced.
+  const pasteChordPending = useRef(false);
   const { mediaStream, mediaStreamTrackVersion, peerConnectionState } = useRTCStore();
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioAutoplayBlocked, setAudioAutoplayBlocked] = useState(false);
@@ -415,6 +421,30 @@ export default function WebRTCVideo({
       .catch(() => {});
   }, [audioAutoplayBlocked]);
 
+  // A paste chord produced no `paste` event. A secure page (HTTPS) can read
+  // the clipboard itself, the browser may ask first; a plain HTTP page gets
+  // no clipboard without a real paste, so the paste popover opens and a
+  // Cmd+V (Ctrl+V) into its box sends the text.
+  const pasteWithoutPasteEvent = useCallback(() => {
+    const askForPaste = () => setPendingPasteText("");
+    if (!window.isSecureContext || !navigator.clipboard?.readText) {
+      askForPaste();
+      return;
+    }
+    navigator.clipboard
+      .readText()
+      .then(text => {
+        if (!text) {
+          notifications.error(m.clipboard_paste_empty());
+          return;
+        }
+        void pasteViaGuest(text).then(result => {
+          if (result === "unavailable") setPendingPasteText(text);
+        });
+      })
+      .catch(askForPaste);
+  }, [pasteViaGuest, setPendingPasteText]);
+
   const keyDownHandler = useCallback(
     (e: KeyboardEvent) => {
       if (isOcrMode) return; // Let OCR overlay handle keys
@@ -426,6 +456,16 @@ export default function WebRTCVideo({
         // `paste` event it would fire.
         if (e.repeat || e.code === "KeyC") e.preventDefault();
         if (!e.repeat && e.code === "KeyC") void copyFromGuest();
+        if (!e.repeat && e.code === "KeyV") {
+          // macOS has no Ctrl+Shift+V paste, and Safari none for Cmd+Shift+V:
+          // there the browser fires no `paste` event and the chord did nothing.
+          pasteChordPending.current = true;
+          window.setTimeout(() => {
+            if (!pasteChordPending.current) return;
+            pasteChordPending.current = false;
+            pasteWithoutPasteEvent();
+          }, pasteEventWaitMs);
+        }
         return;
       }
       e.preventDefault();
@@ -504,6 +544,7 @@ export default function WebRTCVideo({
       retryBlockedAudio,
       osServices,
       copyFromGuest,
+      pasteWithoutPasteEvent,
     ],
   );
 
@@ -650,6 +691,7 @@ export default function WebRTCVideo({
   const pasteHandler = useCallback(
     (e: ClipboardEvent) => {
       if (isOcrMode || isEditableTarget(e.target)) return;
+      pasteChordPending.current = false;
       e.preventDefault();
       const text = e.clipboardData?.getData("text/plain") ?? "";
       if (!text) {

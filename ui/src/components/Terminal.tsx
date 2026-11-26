@@ -1,5 +1,10 @@
 import "react-simple-keyboard/build/css/index.css";
-import { ChevronDownIcon, PauseCircleIcon, PlayCircleIcon } from "@heroicons/react/16/solid";
+import {
+  ChevronDownIcon,
+  PauseCircleIcon,
+  PlayCircleIcon,
+  XMarkIcon,
+} from "@heroicons/react/16/solid";
 import { MutableRefObject, useEffect, useMemo, useCallback, useRef, useState } from "react";
 import { useXTerm } from "react-xtermjs";
 import { FitAddon } from "@xterm/addon-fit";
@@ -12,6 +17,7 @@ import { m } from "@localizations/messages.js";
 import { cx } from "@/cva.config";
 import { AvailableTerminalTypes, useUiStore, useTerminalStore } from "@/hooks/stores";
 import { CommandInput } from "@/components/CommandInput";
+import { useGuestTerminalStatus } from "@/hooks/useGuestTerminalStatus";
 import { JsonRpcResponse, useJsonRpc } from "@/hooks/useJsonRpc";
 import notifications from "@/notifications";
 import { Button } from "@components/Button";
@@ -77,8 +83,13 @@ function Terminal({
   // Messages the channel received before this terminal was listening.
   readonly backlog?: MutableRefObject<(string | ArrayBuffer | Blob)[]>;
 }) {
-  const { terminalType, setTerminalType, setDisableVideoFocusTrap, disableVideoFocusTrap } =
-    useUiStore();
+  const {
+    terminalType,
+    setTerminalType,
+    setDisableVideoFocusTrap,
+    disableVideoFocusTrap,
+    endGuestTerminalSession,
+  } = useUiStore();
   const { terminator } = useTerminalStore();
   const { instance, ref } = useXTerm({ options: TERMINAL_CONFIG });
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -261,6 +272,35 @@ function Terminal({
     };
   }, [instance]);
 
+  // The guest shell's activity, title, command marks and progress, for the
+  // dock button while the panel is minimized.
+  useEffect(() => {
+    if (!instance || type !== "guest") return;
+    const status = useGuestTerminalStatus.getState();
+    const hidden = () => useUiStore.getState().terminalType !== "guest";
+    const disposables = [
+      instance.onTitleChange(title => status.setTitle(title)),
+      instance.onBell(() => status.ring(hidden())),
+      instance.onWriteParsed(() => status.output(hidden())),
+      instance.parser.registerOscHandler(133, data => {
+        status.shellMark(data);
+        return true;
+      }),
+      instance.parser.registerOscHandler(9, data => {
+        status.progressSequence(data);
+        return true;
+      }),
+    ];
+    return () => {
+      disposables.forEach(disposable => disposable.dispose());
+      status.reset();
+    };
+  }, [instance, type]);
+
+  useEffect(() => {
+    if (type === "guest" && isTerminalTypeEnabled) useGuestTerminalStatus.getState().seen();
+  }, [isTerminalTypeEnabled, type]);
+
   // The guest terminal fills its panel from the moment it appears, not only
   // after a window resize, since the guest's shell is sized to it.
   useEffect(() => {
@@ -298,7 +338,7 @@ function Terminal({
               <h2 className="self-center font-sans text-sm leading-none font-medium text-slate-700 select-none dark:text-slate-300">
                 {title}
               </h2>
-              <div className="absolute right-2">
+              <div className="absolute right-2 flex items-center gap-x-2">
                 {terminalType == "serial" && (
                   <Button
                     size="XS"
@@ -311,14 +351,25 @@ function Terminal({
                     data-testid={undefined}
                   />
                 )}
+                {/* A guest shell keeps running while its panel is minimized;
+                    End session closes it. */}
                 <Button
                   size="XS"
                   theme="light"
-                  text={m.hide()}
+                  text={type === "guest" ? m.terminal_minimize() : m.hide()}
                   LeadingIcon={ChevronDownIcon}
                   onClick={() => setTerminalType("none")}
                   data-testid={undefined}
                 />
+                {type === "guest" && (
+                  <Button
+                    size="XS"
+                    theme="light"
+                    text={m.terminal_end_session()}
+                    LeadingIcon={XMarkIcon}
+                    onClick={endGuestTerminalSession}
+                  />
+                )}
               </div>
             </div>
 

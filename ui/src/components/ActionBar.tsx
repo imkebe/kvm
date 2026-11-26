@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef } from "react";
-import { MdOutlineContentPasteGo } from "react-icons/md";
+import { MdOutlineContentPasteGo, MdTouchApp } from "react-icons/md";
 import {
   LuCable,
   LuCpu,
@@ -60,6 +60,7 @@ export default function Actionbar({
     usbSerialConsoleEnabled,
     setUsbSerialConsoleEnabled,
     isEmbedMode,
+    guestTerminalSession,
   } = useUiStore();
   const hostInfoAvailable = useHostInfoStore(state => !!state.state?.available);
   const pasteButtonRef = useRef<HTMLButtonElement>(null);
@@ -76,7 +77,7 @@ export default function Actionbar({
   // looks unavailable but still opens.
   const massStorageOff = useUsbFunctionsStore(state => state.usbFunctions?.mass_storage === false);
   const { width: videoWidth, height: videoHeight } = useVideoStore();
-  const { developerMode } = useSettingsStore();
+  const { developerMode, pasteAsKeystrokes, setPasteAsKeystrokes } = useSettingsStore();
   const shell = useCapability("shell");
   const kvmTerminal = developerMode && shell;
   const extensions = useCapability("extensions");
@@ -128,7 +129,17 @@ export default function Actionbar({
       ? [{ type: "cdcacm" as const, label: "USB Serial Console", icon: LuTerminal }]
       : []),
     ...(guestTerminal
-      ? [{ type: "guest" as const, label: m.guest_terminal(), icon: LuTerminal }]
+      ? [
+          {
+            type: "guest" as const,
+            // A minimized guest shell is still running.
+            label:
+              guestTerminalSession && terminalType !== "guest"
+                ? m.guest_terminal_running()
+                : m.guest_terminal(),
+            icon: LuTerminal,
+          },
+        ]
       : []),
   ];
   const toggleTerminal = (type: AvailableTerminalTypes) =>
@@ -169,13 +180,37 @@ export default function Actionbar({
           ) : null}
           <Popover>
             <SplitButtonGroup>
+              {osServices && (
+                <button
+                  type="button"
+                  aria-pressed={pasteAsKeystrokes}
+                  title={
+                    pasteAsKeystrokes
+                      ? m.paste_keystrokes_toggle_on()
+                      : m.paste_keystrokes_toggle_off()
+                  }
+                  aria-label={
+                    pasteAsKeystrokes
+                      ? m.paste_keystrokes_toggle_on()
+                      : m.paste_keystrokes_toggle_off()
+                  }
+                  onClick={() => setPasteAsKeystrokes(!pasteAsKeystrokes)}
+                  className={cx(
+                    "inline-flex h-[28px] cursor-pointer items-center rounded-l-sm border border-r-0 px-1.5 shadow-xs transition-colors",
+                    pasteAsKeystrokes
+                      ? "border-blue-900/60 bg-blue-700 text-white hover:bg-blue-800 dark:border-blue-600"
+                      : "border-slate-800/30 bg-white text-slate-500 hover:bg-blue-50/80 dark:border-slate-300/20 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700",
+                  )}
                 >
+                  <MdTouchApp className="h-3.5 w-3.5" />
                 </button>
+              )}
               <PopoverButton
                 as={SplitButtonPrimary}
                 ref={pasteButtonRef}
                 icon={MdOutlineContentPasteGo}
                 label={m.paste_text()}
+                className={osServices ? "rounded-l-none" : undefined}
                 onClick={() => setDisableVideoFocusTrap(true)}
               />
               <SplitButtonCaret
