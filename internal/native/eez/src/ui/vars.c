@@ -8,6 +8,18 @@ char system_version[100] = { 0 };
 char lvgl_version[32] = { 0 };
 char main_screen[32] = "home_screen";
 
+// The home screen's status, cards and details: see cgo/home_ext.h.
+#include "../../../cgo/home_ext.h"
+
+const char *get_var_home_status() { return home_ext_get_status(); }
+void set_var_home_status(const char *value) { home_ext_set_status(value); }
+const char *get_var_home_cards() { return home_ext_get_cards(); }
+void set_var_home_cards(const char *value) { home_ext_set_cards(value); }
+const char *get_var_home_details() { return home_ext_get_details(); }
+void set_var_home_details(const char *value) { home_ext_set_details(value); }
+const char *get_var_home_page() { return ""; }
+void set_var_home_page(const char *value) { home_ext_set_page(value); }
+
 const char *get_var_app_version() {
     return app_version;
 }

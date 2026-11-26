@@ -686,3 +686,9 @@ func osServicesKeyframeRequest() {
 		osServices.video.wantKeyframe()
 	}
 }
+
+// osServicesUSBEnabled reports whether the gadget has the OS Services USB
+// interface, which takes IN endpoints the other USB devices cannot use.
+func osServicesUSBEnabled() bool {
+	return osServices != nil && osServices.config().Enabled
+}

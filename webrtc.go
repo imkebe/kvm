@@ -76,6 +76,9 @@ const (
 // first frame after a change of source moves the RTP clock by one nominal
 // frame.
 func (s *Session) writeVideoFrame(source videoClockSource, frame []byte, pts time.Duration) error {
+	// For the statistics on the device screen.
+	videoFramesSent.Add(1)
+	videoBytesSent.Add(uint64(len(frame)))
 	s.videoClockMu.Lock()
 	defer s.videoClockMu.Unlock()
 

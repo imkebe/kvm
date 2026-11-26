@@ -1,3 +1,4 @@
+#include "home_ext.h"
 #include <time.h>
 #include <sys/time.h>
 #include <stdio.h>
@@ -100,6 +101,7 @@ void lvgl_init(u_int16_t rotation) {
     log_trace("initalizing ui");
 
     ui_init();
+    home_ext_init();
 
     ui_set_rpc_handler((jetkvm_rpc_handler_t *)jetkvm_call_rpc_handler);
 
@@ -109,6 +111,7 @@ void lvgl_init(u_int16_t rotation) {
 void lvgl_tick(void) {
     lv_timer_handler();
     ui_tick();
+    home_ext_tick();
 }
 
 void lvgl_set_rotation(lv_display_t *disp_ref, u_int16_t rotation) {

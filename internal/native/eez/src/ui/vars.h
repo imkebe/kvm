@@ -31,6 +31,14 @@ extern const char *get_var_lvgl_version();
 extern void set_var_lvgl_version(const char *value);
 extern const char *get_var_main_screen();
 extern void set_var_main_screen(const char *value);
+extern const char *get_var_home_status();
+extern void set_var_home_status(const char *value);
+extern const char *get_var_home_cards();
+extern void set_var_home_cards(const char *value);
+extern const char *get_var_home_details();
+extern void set_var_home_details(const char *value);
+extern const char *get_var_home_page();
+extern void set_var_home_page(const char *value);
 
 
 #ifdef __cplusplus
