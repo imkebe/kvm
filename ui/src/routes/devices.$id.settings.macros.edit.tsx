@@ -48,6 +48,7 @@ export default function SettingsMacrosEditRoute() {
               ...macro,
               name: updatedMacro.name!.trim(),
               steps: updatedMacro.steps || [],
+              tags: updatedMacro.tags ?? [],
             }
           : m,
       );

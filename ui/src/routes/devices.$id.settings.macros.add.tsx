@@ -21,6 +21,7 @@ export default function SettingsMacrosAddRoute() {
         id: generateMacroId(),
         name: macro.name!.trim(),
         steps: macro.steps || [],
+        tags: macro.tags ?? [],
         sortOrder: macros.length + 1,
       };
 

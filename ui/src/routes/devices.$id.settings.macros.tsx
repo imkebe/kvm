@@ -12,6 +12,8 @@ import {
 } from "react-icons/lu";
 
 import { KeySequence, useMacrosStore, generateMacroId } from "@hooks/stores";
+import { MacroTagFilter, TagChip, allMacroTags, macroMatches } from "@components/MacroTags";
+import InputField from "@components/InputField";
 import useKeyboardLayout from "@hooks/useKeyboardLayout";
 import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { Button } from "@components/Button";
@@ -31,6 +33,16 @@ export default function SettingsMacrosRoute() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [macroToDelete, setMacroToDelete] = useState<KeySequence | null>(null);
   const { selectedKeyboard } = useKeyboardLayout();
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const tags = useMemo(() => allMacroTags(macros), [macros]);
+  // A tag that is no longer used shows all again.
+  const activeTag = tagFilter && tags.includes(tagFilter) ? tagFilter : null;
+  const filtering = activeTag !== null || query.trim() !== "";
+  const visibleMacros = useMemo(
+    () => macros.filter(macro => macroMatches(macro, activeTag, query)),
+    [macros, activeTag, query],
+  );
 
   const isMaxMacrosReached = useMemo(() => macros.length >= MAX_TOTAL_MACROS, [macros.length]);
 
@@ -139,7 +151,15 @@ export default function SettingsMacrosRoute() {
   const MacroList = useMemo(
     () => (
       <div className="space-y-2">
-        {macros.map((macro, index) => (
+        {visibleMacros.length === 0 && (
+          <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+            {m.macro_tags_no_match()}
+          </p>
+        )}
+        {visibleMacros.map(macro => {
+          // Moves work on the full list; while filtered they are off.
+          const index = macros.indexOf(macro);
+          return (
           <Card key={macro.id} className="bg-white p-2 dark:bg-slate-800">
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1 px-2">
@@ -147,7 +167,7 @@ export default function SettingsMacrosRoute() {
                   size="XS"
                   theme="light"
                   onClick={() => handleMoveMacro(index, "up", macro.id)}
-                  disabled={index === 0 || actionLoadingId === macro.id}
+                  disabled={filtering || index === 0 || actionLoadingId === macro.id}
                   LeadingIcon={LuArrowUp}
                   aria-label={m.macros_aria_move_up({ name: macro.name })}
                 />
@@ -155,16 +175,23 @@ export default function SettingsMacrosRoute() {
                   size="XS"
                   theme="light"
                   onClick={() => handleMoveMacro(index, "down", macro.id)}
-                  disabled={index === macros.length - 1 || actionLoadingId === macro.id}
+                  disabled={
+                    filtering || index === macros.length - 1 || actionLoadingId === macro.id
+                  }
                   LeadingIcon={LuArrowDown}
                   aria-label={m.macros_aria_move_down({ name: macro.name })}
                 />
               </div>
 
               <div className="ml-2 flex min-w-0 flex-1 flex-col justify-center">
-                <h3 className="truncate text-sm font-semibold text-black dark:text-white">
-                  {macro.name}
-                </h3>
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className="truncate text-sm font-semibold text-black dark:text-white">
+                    {macro.name}
+                  </h3>
+                  {(macro.tags ?? []).map(tag => (
+                    <TagChip key={tag} tag={tag} size="xs" />
+                  ))}
+                </div>
                 <p className="mt-1 ml-4 overflow-hidden text-xs text-slate-500 dark:text-slate-400">
                   <span className="flex flex-col items-start gap-1">
                     {macro.steps.map((step, stepIndex) => {
@@ -265,7 +292,8 @@ export default function SettingsMacrosRoute() {
               </div>
             </div>
           </Card>
-        ))}
+          );
+        })}
 
         <ConfirmDialog
           open={showDeleteConfirm}
@@ -296,6 +324,8 @@ export default function SettingsMacrosRoute() {
       selectedKeyboard.keyDisplayMap,
       handleDuplicateMacro,
       navigate,
+      visibleMacros,
+      filtering,
     ],
   );
 
@@ -345,7 +375,27 @@ export default function SettingsMacrosRoute() {
             }
           />
         ) : (
-          MacroList
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="w-48">
+                <InputField
+                  size="SM"
+                  type="search"
+                  placeholder={m.macro_tags_search()}
+                  aria-label={m.macro_tags_search()}
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                />
+              </div>
+              <MacroTagFilter tags={tags} value={activeTag} onChange={setTagFilter} />
+            </div>
+            {filtering && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {m.macro_tags_reorder_filtered()}
+              </p>
+            )}
+            {MacroList}
+          </>
         )}
       </div>
     </div>

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { LuPlus } from "react-icons/lu";
 
-import { KeySequence } from "@hooks/stores";
+import { KeySequence, useMacrosStore } from "@hooks/stores";
+import { TagChip, allMacroTags, normalizeTags, parseTags } from "@components/MacroTags";
 import useKeyboardLayout from "@hooks/useKeyboardLayout";
 import { Button } from "@components/Button";
 import FieldLabel from "@components/FieldLabel";
@@ -41,6 +42,15 @@ export function MacroForm({
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { selectedKeyboard } = useKeyboardLayout();
+  // Tags as typed ("windows, macos"); the macro keeps the parsed list.
+  const [tagText, setTagText] = useState((initialData.tags ?? []).join(", "));
+  const knownTags = allMacroTags(useMacrosStore(state => state.macros));
+
+  const setTags = (tags: string[]) => {
+    const normalized = normalizeTags(tags);
+    setMacro(prev => ({ ...prev, tags: normalized }));
+    setTagText(normalized.join(", "));
+  };
 
   const showTemporaryError = (message: string) => {
     setErrorMessage(message);
@@ -189,6 +199,40 @@ export function MacroForm({
             }
           }}
         />
+      </Fieldset>
+
+      <Fieldset>
+        <InputFieldWithLabel
+          type="text"
+          label={m.macro_tags_label()}
+          description={m.macro_tags_description()}
+          placeholder={m.macro_tags_placeholder()}
+          value={tagText}
+          onChange={e => {
+            setTagText(e.target.value);
+            setMacro(prev => ({ ...prev, tags: parseTags(e.target.value) }));
+          }}
+          onBlur={() => setTagText((macro.tags ?? []).join(", "))}
+        />
+        {knownTags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {knownTags.map(tag => {
+              const on = (macro.tags ?? []).includes(tag);
+              return (
+                <TagChip
+                  key={tag}
+                  tag={tag}
+                  active={on}
+                  onClick={() =>
+                    setTags(
+                      on ? (macro.tags ?? []).filter(t => t !== tag) : [...(macro.tags ?? []), tag],
+                    )
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
       </Fieldset>
 
       <div>
