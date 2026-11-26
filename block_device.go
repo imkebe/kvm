@@ -115,6 +115,10 @@ func (d *NBDDevice) Start() error {
 	return nil
 }
 
+// nbdBlockSize is the sector size the target sees for a disk mounted through
+// NBD (see runClientConn): 512, as on a USB stick.
+const nbdBlockSize = uint32(512)
+
 func (d *NBDDevice) runServerConn() {
 	err := server.Handle(
 		d.serverConn,
@@ -127,8 +131,8 @@ func (d *NBDDevice) runServerConn() {
 		},
 		&server.Options{
 			ReadOnly:           true,
-			MinimumBlockSize:   uint32(1024),
-			PreferredBlockSize: uint32(4 * 1024),
+			MinimumBlockSize:   nbdBlockSize,
+			PreferredBlockSize: nbdBlockSize,
 			MaximumBlockSize:   uint32(16 * 1024),
 			SupportsMultiConn:  false,
 		})
