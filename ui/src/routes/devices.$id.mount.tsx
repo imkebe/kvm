@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LuLink, LuRadioReceiver, LuCheck, LuUpload, LuDownload } from "react-icons/lu";
+import {
+  LuLink,
+  LuRadioReceiver,
+  LuCheck,
+  LuUpload,
+  LuDownload,
+  LuFolderOpen,
+} from "react-icons/lu";
 import { PlusCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/20/solid";
 import { TrashIcon } from "@heroicons/react/16/solid";
 
@@ -25,6 +32,21 @@ import notifications from "@/notifications";
 import { m } from "@localizations/messages.js";
 import { useDeviceUiNavigation } from "@hooks/useAppNavigation";
 import { useVideoStreamPause } from "@hooks/useVideoStreamPause";
+import { releaseFolder, startFolderServing } from "@hooks/useFolderMount";
+import {
+  buildFolderImage,
+  type FolderFile,
+  type FolderFs,
+  type FolderImage,
+} from "@/utils/folderImage";
+import {
+  folderTraits,
+  proposeFolderFs,
+  targetSystem,
+  type FsProposal,
+  type TargetSystem,
+} from "@/utils/folderFs";
+import { useHostInfoStore } from "@hooks/hostInfo";
 
 import {
   MountMediaState,
@@ -33,6 +55,7 @@ import {
   useRTCStore,
   useCapability,
   useUsbFunctionsStore,
+  useVideoStore,
   type UsbFunctions,
 } from "../hooks/stores";
 
@@ -127,7 +150,36 @@ export function Dialog({ onClose }: Readonly<{ onClose: () => void }>) {
     clearMountMediaState();
   }
 
-  const [selectedMode, setSelectedMode] = useState<"url" | "device">("url");
+  async function handleFolderMount(image: FolderImage, name: string) {
+    setMountInProgress(true);
+    try {
+      await startFolderServing(image, name);
+    } catch (err) {
+      setMountInProgress(false);
+      triggerError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    send(
+      "mountWithBrowser",
+      { name, size: image.size, imageId: image.id },
+      (resp: JsonRpcResponse) => {
+        if ("error" in resp) {
+          releaseFolder();
+          setMountInProgress(false);
+          triggerError(typeof resp.error.data === "string" ? resp.error.data : resp.error.message);
+          syncRemoteVirtualMediaState().catch(() => undefined);
+          return;
+        }
+        clearMountMediaState();
+        syncRemoteVirtualMediaState()
+          .then(() => onClose())
+          .catch(err => triggerError(err instanceof Error ? err.message : String(err)))
+          .finally(() => setMountInProgress(false));
+      },
+    );
+  }
+
+  const [selectedMode, setSelectedMode] = useState<MountSource>("url");
   return (
     <AutoHeight>
       <div
@@ -136,6 +188,7 @@ export function Dialog({ onClose }: Readonly<{ onClose: () => void }>) {
           "max-w-2xl": modalView === "device",
           "max-w-xl":
             modalView === "url" ||
+            modalView === "folder" ||
             modalView === "upload" ||
             modalView === "download" ||
             modalView === "error",
@@ -172,6 +225,17 @@ export function Dialog({ onClose }: Readonly<{ onClose: () => void }>) {
                   onMount={(url, mode) => {
                     handleUrlMount(url, mode);
                   }}
+                />
+              )}
+
+              {modalView === "folder" && (
+                <FolderView
+                  mountInProgress={mountInProgress}
+                  onBack={() => {
+                    setMountInProgress(false);
+                    setModalView("mode");
+                  }}
+                  onMount={(image, name) => void handleFolderMount(image, name)}
                 />
               )}
 
@@ -233,14 +297,16 @@ export function Dialog({ onClose }: Readonly<{ onClose: () => void }>) {
   );
 }
 
+type MountSource = "url" | "device" | "folder";
+
 function ModeSelectionView({
   onClose,
   selectedMode,
   setSelectedMode,
 }: {
   onClose: () => void;
-  selectedMode: "url" | "device";
-  setSelectedMode: (mode: "url" | "device") => void;
+  selectedMode: MountSource;
+  setSelectedMode: (mode: MountSource) => void;
 }) {
   const { setModalView } = useMountMediaStore();
   const { send } = useJsonRpc();
@@ -307,6 +373,14 @@ function ModeSelectionView({
             tag: null,
             disabled: false,
           },
+          {
+            label: m.mount_folder(),
+            value: "folder",
+            description: m.mount_folder_description(),
+            icon: LuFolderOpen,
+            tag: m.experimental(),
+            disabled: false,
+          },
         ].map(({ label, description, value: mode, icon: Icon, tag, disabled }, index) => (
           <div
             key={label}
@@ -328,7 +402,7 @@ function ModeSelectionView({
             >
               <div
                 className="relative z-50 flex flex-col items-start p-4 select-none"
-                onClick={() => (disabled ? null : setSelectedMode(mode as "url" | "device"))}
+                onClick={() => (disabled ? null : setSelectedMode(mode as MountSource))}
               >
                 <div>
                   <Card>
@@ -536,6 +610,242 @@ function UrlView({
             </div>
           ))}
         </Card>
+      </div>
+    </div>
+  );
+}
+
+function fsReasonText(proposal: FsProposal, target: TargetSystem | null) {
+  switch (proposal.reason) {
+    case "uefi":
+      return m.mount_folder_fs_why_uefi();
+    case "windows":
+    case "macos":
+      return m.mount_folder_fs_why_native({ os: target?.name ?? "" });
+    case "linux":
+      return m.mount_folder_fs_why_linux({ kernel: target?.kernel ?? "" });
+    case "linux_old":
+      return m.mount_folder_fs_why_linux_old();
+    case "other":
+      return m.mount_folder_fs_why_other({ os: target?.name ?? "" });
+    case "large_files":
+      return m.mount_folder_fs_why_large_files();
+    case "unknown":
+      return m.mount_folder_fs_why_unknown();
+  }
+}
+
+const FS_NAMES: Record<FolderFs, string> = { fat32: "FAT32", exfat: "exFAT" };
+
+// A folder picked in the browser, mounted as a read-only FAT32 or exFAT USB
+// disk that this tab serves (hooks/useFolderMount.ts).
+function FolderView({
+  mountInProgress,
+  onBack,
+  onMount,
+}: {
+  mountInProgress: boolean;
+  onBack: () => void;
+  onMount: (image: FolderImage, name: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [picked, setPicked] = useState<{ name: string; entries: FolderFile[] } | null>(null);
+  const [folder, setFolder] = useState<{ name: string; image: FolderImage } | null>(null);
+  const [building, setBuilding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fsChoice, setFsChoice] = useState<"auto" | FolderFs>("auto");
+
+  // The target's system, when OS Services reports it.
+  const hostOs = useHostInfoStore(state =>
+    state.state?.available ? state.state.inventory?.os : undefined,
+  );
+  const clipboardOs = useVideoStore(state => state.guestClipboard?.os);
+  const target = useMemo(() => targetSystem(hostOs, clipboardOs), [hostOs, clipboardOs]);
+  const traits = useMemo(() => folderTraits(picked?.entries ?? []), [picked]);
+  const proposal = useMemo(() => proposeFolderFs(target, traits), [target, traits]);
+  const fs = fsChoice === "auto" ? proposal.fs : fsChoice;
+
+  // The disk image for the picked folder in the chosen file system.
+  useEffect(() => {
+    if (!picked) return;
+    setBuilding(true);
+    setError(null);
+    // Let the "reading" state paint before the synchronous build.
+    const timer = window.setTimeout(() => {
+      try {
+        const image = buildFolderImage(picked.name, picked.entries, fs);
+        if (image.files === 0 && image.skipped.length === 0) {
+          setFolder(null);
+          setError(m.mount_folder_empty());
+        } else {
+          setFolder({ name: picked.name, image });
+        }
+      } catch (err) {
+        setFolder(null);
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBuilding(false);
+      }
+    }, 20);
+    return () => window.clearTimeout(timer);
+  }, [picked, fs]);
+
+  function handleFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    const files = Array.from(list);
+    const name = files[0].webkitRelativePath.split("/")[0] || "Folder";
+    const entries: FolderFile[] = files.map(file => ({
+      path: file.webkitRelativePath.split("/").slice(1).join("/") || file.name,
+      file,
+    }));
+    setFolder(null);
+    setPicked({ name, entries });
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  const image = folder?.image;
+  return (
+    <div className="w-full space-y-4">
+      <ViewHeader
+        title={m.mount_view_folder_title()}
+        description={m.mount_view_folder_description()}
+      />
+      <input
+        ref={el => {
+          inputRef.current = el;
+          el?.setAttribute("webkitdirectory", "");
+        }}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={e => handleFiles(e.target.files)}
+      />
+      <div className="animate-fadeIn space-y-3 opacity-0" style={{ animationDuration: "0.7s" }}>
+        <Card>
+          <div className="flex items-start justify-between gap-x-4 p-4">
+            <div className="flex min-w-0 items-start gap-x-3">
+              <Card>
+                <div className="p-1">
+                  <LuFolderOpen className="h-4 w-4 shrink-0 text-blue-700 dark:text-blue-400" />
+                </div>
+              </Card>
+              <div className="min-w-0 space-y-1 text-sm">
+                {building ? (
+                  <p className="text-slate-700 dark:text-slate-300">{m.mount_folder_building()}</p>
+                ) : folder && image ? (
+                  <>
+                    <p className="truncate font-semibold text-black dark:text-white">
+                      {folder.name}
+                    </p>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      {m.mount_folder_summary({
+                        files: image.files,
+                        dirs: image.dirs,
+                        size: formatters.bytes(image.dataBytes),
+                      })}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {m.mount_folder_disk({
+                        fs: FS_NAMES[image.fs],
+                        size: formatters.bytes(image.size),
+                        label: image.label,
+                      })}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-700 dark:text-slate-300">
+                    {m.mount_folder_description()}
+                  </p>
+                )}
+              </div>
+            </div>
+            <Button
+              size="SM"
+              theme="light"
+              text={folder ? m.mount_folder_choose_other() : m.mount_folder_choose()}
+              disabled={building || mountInProgress}
+              onClick={() => inputRef.current?.click()}
+            />
+          </div>
+        </Card>
+
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium dark:text-white">{m.mount_folder_fs()}</p>
+            <div className="flex gap-1 rounded-md bg-slate-100 p-1 dark:bg-slate-800">
+              {(["auto", "fat32", "exfat"] as const).map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={mountInProgress}
+                  onClick={() => setFsChoice(value)}
+                  className={cx(
+                    "rounded px-3 py-1 text-xs font-medium transition-colors",
+                    fsChoice === value
+                      ? "bg-white text-slate-950 shadow-sm dark:bg-slate-700 dark:text-white"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white",
+                  )}
+                >
+                  {value === "auto"
+                    ? m.mount_folder_fs_auto({ fs: FS_NAMES[proposal.fs] })
+                    : FS_NAMES[value]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            {target ? m.mount_folder_fs_target({ os: target.name }) : m.mount_folder_fs_no_target()}{" "}
+            {fsReasonText(proposal, target)}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {fs === "exfat" ? m.mount_folder_fs_exfat_about() : m.mount_folder_fs_fat32_about()}
+          </p>
+        </div>
+
+        {image && image.skipped.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200">
+            <p className="flex items-center gap-x-1 font-semibold">
+              <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+              {m.mount_folder_skipped({ count: image.skipped.length })}
+              {fs === "fat32" && ` ${m.mount_folder_skipped_exfat()}`}
+            </p>
+            <ul className="mt-1 list-inside list-disc">
+              {image.skipped.slice(0, 5).map(path => (
+                <li key={path} className="truncate">
+                  {path}
+                </li>
+              ))}
+              {image.skipped.length > 5 && <li>…</li>}
+            </ul>
+          </div>
+        )}
+        {image && image.renamed > 0 && (
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            {m.mount_folder_renamed({ count: image.renamed })}
+          </p>
+        )}
+
+        <ul className="list-inside list-disc space-y-1 text-xs text-slate-600 dark:text-slate-400">
+          <li>{m.mount_folder_read_only()}</li>
+          <li>{m.mount_folder_keep_open()}</li>
+        </ul>
+      </div>
+
+      <div
+        className="flex animate-fadeIn justify-end space-x-2 opacity-0"
+        style={{ animationDuration: "0.7s", animationDelay: "0.1s" }}
+      >
+        <Button size="MD" theme="blank" text={m.back()} onClick={onBack} />
+        <Button
+          size="MD"
+          theme="primary"
+          loading={mountInProgress}
+          text={m.mount_button_mount_folder()}
+          disabled={!folder || building || mountInProgress}
+          onClick={() => folder && onMount(folder.image, folder.name)}
+        />
       </div>
     </div>
   );

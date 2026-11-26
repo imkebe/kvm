@@ -714,6 +714,8 @@ func newSession(config SessionConfig) (*Session, error) {
 			})
 		case osservices.TerminalChannelLabel:
 			handleGuestTerminalChannel(d)
+		case browserDiskChannelLabel:
+			handleBrowserDiskChannel(d)
 		default:
 			if strings.HasPrefix(d.Label(), uploadIdPrefix) {
 				go handleUploadChannel(d)

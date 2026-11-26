@@ -290,6 +290,9 @@ func (m *MQTTManager) publishVirtualMediaState() {
 				state.MountedImage = currentVirtualMediaState.Filename
 				state.Source = "storage"
 			}
+		case Browser:
+			state.Source = "browser"
+			state.MountedImage = currentVirtualMediaState.Filename
 		case HTTP:
 			state.Source = "url"
 			// Extract just the filename from the URL path
