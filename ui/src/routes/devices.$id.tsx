@@ -53,11 +53,18 @@ import {
   useJsonRpc,
 } from "@hooks/useJsonRpc";
 import { useDeviceUiNavigation } from "@hooks/useAppNavigation";
+import {
+  HostInfoState,
+  HostMetrics,
+  useHostInfoAvailability,
+  useHostInfoStore,
+} from "@hooks/hostInfo";
 import type { VersionInfo as LocalVersion } from "@hooks/useVersion";
 import { useHiddenVideoStreamPause } from "@hooks/useHiddenVideoStreamPause";
 import WebRTCVideo from "@components/WebRTCVideo";
 import DashboardNavbar from "@components/Header";
 const ConnectionStatsSidebar = lazy(() => import("@components/sidebar/connectionStats"));
+const HostInfoSidebar = lazy(() => import("@components/sidebar/hostInfo"));
 const Terminal = lazy(() => import("@components/Terminal"));
 const UpdateInProgressStatusCard = lazy(() => import("@components/UpdateInProgressStatusCard"));
 import Modal from "@components/Modal";
@@ -428,6 +435,10 @@ export default function KvmIdRoute() {
   const [hasUpdated, setHasUpdated] = useState(false);
   const { navigateTo } = useDeviceUiNavigation();
 
+  const applyHostInfoState = useHostInfoStore(state => state.applyState);
+  const applyHostMetrics = useHostInfoStore(state => state.applyMetrics);
+  useHostInfoAvailability();
+
   function onJsonRpcRequest(resp: JsonRpcRequest) {
     if (resp.method === "otherSessionConnected") {
       navigateTo("/other-session");
@@ -445,6 +456,14 @@ export default function KvmIdRoute() {
 
     if (resp.method === "videoInputState") {
       applyVideoState(resp.params as unknown as RpcVideoState);
+    }
+
+    if (resp.method === "hostInfoState") {
+      applyHostInfoState(resp.params as unknown as HostInfoState);
+    }
+
+    if (resp.method === "hostMetrics") {
+      applyHostMetrics(resp.params as unknown as HostMetrics);
     }
 
     if (resp.method === "osServicesSettings") {
@@ -996,6 +1015,20 @@ function SidebarContainer(props: SidebarContainerProps) {
               }}
             >
               <ConnectionStatsSidebar />
+            </motion.div>
+          )}
+          {sidebarView === "host-info" && (
+            <motion.div
+              className="absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 0.5,
+                ease: "easeInOut",
+              }}
+            >
+              <HostInfoSidebar />
             </motion.div>
           )}
         </AnimatePresence>

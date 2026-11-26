@@ -21,6 +21,7 @@ const (
 	svcTerminal  = 3
 	svcFile      = 4
 	svcUpdate    = 5
+	svcHostInfo  = 7
 
 	kHello  = 1
 	kReady  = 2
@@ -132,6 +133,12 @@ type clipEvent struct {
 	truncated bool
 }
 
+type hostDoneEvent struct {
+	requestID uint32
+	result    string
+	failure   string
+}
+
 // hookEvent is one call of a terminal or file hook, in call order.
 type hookEvent struct {
 	kind     string // "output", "closed", "credit" or "done"
@@ -170,6 +177,9 @@ type fakePlatform struct {
 	keyGone      bool
 	stateChanges int
 	clipboard    []clipEvent
+	// HostInfoMetrics and HostInfoDone calls.
+	hostMetrics []string
+	hostDone    []hostDoneEvent
 
 	termOutput      []byte
 	termOutputID    uint32
@@ -248,6 +258,14 @@ func (f *fakePlatform) StateChanged() { f.stateChanges++ }
 
 func (f *fakePlatform) ClipboardDone(requestID uint32, status ClipboardStatus, answered bool, text []byte, truncated bool) {
 	f.clipboard = append(f.clipboard, clipEvent{requestID, status, answered, string(text), truncated})
+}
+
+func (f *fakePlatform) HostInfoMetrics(metrics json.RawMessage) {
+	f.hostMetrics = append(f.hostMetrics, string(metrics))
+}
+
+func (f *fakePlatform) HostInfoDone(requestID uint32, result json.RawMessage, failure string) {
+	f.hostDone = append(f.hostDone, hostDoneEvent{requestID, string(result), failure})
 }
 
 func (f *fakePlatform) TerminalOutput(terminalID uint32, data []byte) bool {
@@ -718,6 +736,9 @@ func (h *harness) checkConfig(m sentMessage, terminal, files bool, display strin
 	d, dok := config["capture_display"].(string)
 	if !tok || !fok || !dok || t != terminal || f != files || d != display {
 		h.t.Fatalf("session.config %s, want terminal %v files %v display %q", m.payload, terminal, files, display)
+	}
+	if enabled, ok := config["hostinfo_enabled"].(bool); !ok || enabled != h.s.Settings().HostInfoEnabled {
+		h.t.Fatalf("session.config %s, want hostinfo_enabled %v", m.payload, h.s.Settings().HostInfoEnabled)
 	}
 	// The KVM leaves the display's mode to a sender that says it sets it.
 	if mode, ok := config["display_mode_by_sender"].(bool); !ok || !mode {

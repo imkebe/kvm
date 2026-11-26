@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jetkvm/kvm/internal/logging"
@@ -56,6 +57,9 @@ type osServicesService struct {
 	fnMu sync.Mutex
 	fn   *ffs.Function
 
+	// lastTargetOS is the last OS name host info reported (targetOSName).
+	lastTargetOS atomic.Pointer[string]
+
 	settingsMu       sync.Mutex
 	settingsSequence uint32
 
@@ -69,6 +73,8 @@ type osServicesService struct {
 	drops          map[uint32]*guestDrop
 
 	video guestVideo
+
+	hostInfo hostInfoGlue
 }
 
 // initOSServices sets up OS Services before the USB gadget, which links the
@@ -93,6 +99,7 @@ func initOSServices() {
 		drops:          map[uint32]*guestDrop{},
 	}
 	s.video.init(s)
+	s.hostInfo.init()
 	udc := ""
 	if udcs, _ := filepath.Glob("/sys/class/udc/*"); len(udcs) > 0 {
 		udc = filepath.Base(udcs[0])
@@ -114,6 +121,8 @@ func initOSServices() {
 	})
 	go s.ticker()
 	go s.stateNotifier()
+	go s.hostInfoNotifier()
+	s.hostInfoTopRun(s.config().HostInfoEnabled)
 	osServicesLogger.Info().Str("fingerprint", s.fingerprint).Msg("OS Services ready")
 }
 
@@ -221,6 +230,7 @@ func (s *osServicesService) ticker() {
 				Bool("presented", s.video.presented.Load()).Msg("video source changed")
 		}
 		s.flushTerminalCredits()
+		s.session.HostInfoWatch(s.hostInfoWatched())
 		s.link.Mu.Unlock()
 		s.link.Wake()
 	}
@@ -234,6 +244,7 @@ func (s *osServicesService) applySettings() {
 func (s *osServicesService) applySettingsFor(browser *Session) {
 	settings := s.config().sessionSettings(browserCodec(browser))
 	s.do(func(session *osservices.Session) { session.ApplySettings(settings) })
+	s.hostInfoTopRun(settings.HostInfoEnabled)
 }
 
 // browserCodec is the codec a browser session negotiated.
@@ -303,6 +314,7 @@ func (s *osServicesService) stateNotifier() {
 			last = text
 			writeJSONRPCEvent("videoInputState", state, currentSession)
 		}
+		s.hostInfoStateChanged()
 		time.Sleep(100 * time.Millisecond)
 	}
 }

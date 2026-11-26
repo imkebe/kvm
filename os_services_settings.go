@@ -24,6 +24,9 @@ type OSServicesConfig struct {
 	DisplayMode      string `json:"display_mode"`
 	Adaptation       string `json:"adaptation,omitempty"`
 	ClipboardEnabled bool   `json:"clipboard_enabled"`
+	// HostInfoEnabled lets the program on the target computer report its
+	// system information. Off until switched on.
+	HostInfoEnabled bool `json:"host_info_enabled"`
 	// LastSenderVersion and LastSenderAt (RFC 3339) are the sender that had
 	// the last approved session. The KVM writes them; a settings request
 	// cannot. They tell a KVM whose sender is away from a KVM that never
@@ -109,6 +112,7 @@ func mergeOSServicesConfig(base OSServicesConfig, request map[string]any) (OSSer
 		{"files_enabled", &merged.FilesEnabled},
 		{"video_enabled", &merged.VideoEnabled},
 		{"clipboard_enabled", &merged.ClipboardEnabled},
+		{"host_info_enabled", &merged.HostInfoEnabled},
 	}
 	for _, b := range bools {
 		if value, ok := field(b.name); ok {
@@ -173,6 +177,7 @@ func (c OSServicesConfig) sessionSettings(codec osservices.Codec) osservices.Set
 		TerminalEnabled:  c.TerminalEnabled,
 		FilesEnabled:     c.FilesEnabled,
 		VideoEnabled:     c.VideoEnabled,
+		HostInfoEnabled:  c.HostInfoEnabled,
 		CaptureDisplay:   c.CaptureDisplay,
 		Width:            r.width,
 		Height:           r.height,

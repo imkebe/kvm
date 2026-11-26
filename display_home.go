@@ -556,6 +556,13 @@ func homeCards() string {
 		homePage("Memory", memory, homeChart(100, 0, blue, rates.memoryHistory)),
 		homePage("Temperature", fmt.Sprintf("%d C", heat), homeChart(0, 60, yellow, rates.heatHistory)),
 		homePage("System state", homeSystemLines()...))
+
+	// The Target card is the last one: the cards before it keep their
+	// places when it comes and goes, and it is the one left out if the
+	// screen's table of cards were full.
+	if target := homeTargetCard(); len(target) > 0 && len(cards) < homeMaxCards {
+		add(target...)
+	}
 	return strings.Join(cards, "\f")
 }
 
@@ -588,6 +595,223 @@ func homeText(text string, limit int) string {
 		out = out[:limit-2] + ".."
 	}
 	return out
+}
+
+// homeTargetPage is a page of the Target card, or "" without lines.
+func homeTargetPage(title string, lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	if len(lines) > homePageLines {
+		lines = lines[:homePageLines]
+	}
+	for i, line := range lines {
+		lines[i] = homeText(line, homeLineChars)
+	}
+	return homePage(title, lines...)
+}
+
+func homeSize(bytes float64) string {
+	switch {
+	case bytes >= 1<<40:
+		return fmt.Sprintf("%.1f TB", bytes/(1<<40))
+	case bytes >= 1<<30:
+		return fmt.Sprintf("%.1f GB", bytes/(1<<30))
+	case bytes >= 1<<20:
+		return fmt.Sprintf("%.0f MB", bytes/(1<<20))
+	}
+	return fmt.Sprintf("%.0f kB", bytes/(1<<10))
+}
+
+// homeTargetCard is the pages of the Target card: what the program on the
+// target computer reports about it. Nil when it reports nothing.
+func homeTargetCard() []string {
+	state, _ := homeOSServices()
+	if !state.HostInfo {
+		return nil
+	}
+	return homeTargetPages(osServices.hostInfoScreen(state.HostInfoInventory))
+}
+
+// homeTargetPages is the summary page of the Target card and up to five
+// pages of details; a page without content is left out. top is the answer
+// to the screen's last query for the busiest processes, nil for none.
+func homeTargetPages(inventory *hostInventory, metrics *hostMetrics, cpuHistory, memoryHistory homeHistory, top *hostTop) []string {
+	const green, blue = byte(homeActive), byte('b')
+
+	system := homeText(strings.TrimSpace(inventory.OS.Name+" "+inventory.OS.Version), homeLineChars)
+	if system == "" {
+		system = "connected"
+	}
+	now := "waiting for readings"
+	if metrics != nil {
+		now = fmt.Sprintf("CPU %.0f%%  Memory %.0f%%", metrics.CPU.Total, metrics.memoryPercent())
+	}
+	pages := []string{homePage("Target", system, now, homeChart(100, 0, green, cpuHistory, blue, memoryHistory))}
+
+	var lines []string
+	line := func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
+	page := func(title string) {
+		if text := homeTargetPage(title, lines); text != "" && len(pages) < homeMaxPages {
+			pages = append(pages, text)
+		}
+		lines = nil
+	}
+
+	if inventory.OS.Hostname != "" {
+		line("Name: %s", inventory.OS.Hostname)
+	}
+	if inventory.OS.Kernel != "" {
+		line("Kernel: %s", inventory.OS.Kernel)
+	}
+	if inventory.CPU.Brand != "" {
+		line("%s", inventory.CPU.Brand)
+	}
+	if inventory.CPU.LogicalCores > 0 {
+		line("%.0f cores, %.0f threads  %s", inventory.CPU.PhysicalCores, inventory.CPU.LogicalCores, homeText(inventory.OS.Arch, 8))
+	} else if inventory.OS.Arch != "" {
+		line("Arch: %s", inventory.OS.Arch)
+	}
+	if inventory.Memory.Total > 0 {
+		line("Memory: %s", homeSize(inventory.Memory.Total))
+	}
+	if metrics != nil && metrics.UptimeS > 0 {
+		up := time.Duration(metrics.UptimeS) * time.Second
+		line("Up %dd %dh %dm", int(up.Hours())/24, int(up.Hours())%24, int(up.Minutes())%60)
+	}
+	page("Target system")
+
+	// The metrics have the free space of now; the inventory has the mounts
+	// before the first metrics.
+	disks := inventory.Disks
+	if metrics != nil && len(metrics.Disks) > 0 {
+		disks = metrics.Disks
+	}
+	for i, disk := range disks {
+		if i == homePageLines-1 && len(disks) > homePageLines {
+			line("and %d more", len(disks)-i)
+			break
+		}
+		line("%s %s of %s", homeText(disk.Mount, 10), homeSize(max(disk.Total-disk.Available, 0)), homeSize(disk.Total))
+	}
+	page("Target storage")
+
+	// Two lines for each interface: the first address, then the rates.
+	// Those that are up come first.
+	for _, up := range []bool{true, false} {
+		for _, network := range inventory.Networks {
+			if network.Up != up || len(lines)+2 > homePageLines {
+				continue
+			}
+			address := "no address"
+			if len(network.Addresses) > 0 {
+				address, _, _ = strings.Cut(network.Addresses[0], "/")
+			}
+			if !up {
+				address = "down"
+			}
+			line("%s  %s", homeText(network.Name, 10), address)
+			if metrics == nil {
+				continue
+			}
+			for _, rate := range metrics.Networks {
+				if rate.Name == network.Name {
+					line(" in %s out %s", homeShortRate(rate.RxBps), homeShortRate(rate.TxBps))
+					break
+				}
+			}
+		}
+	}
+	page("Target network")
+
+	for i, gpu := range inventory.GPUs {
+		if i == 2 {
+			break
+		}
+		line("%s", gpu.Name)
+		detail := ""
+		if gpu.VRAM > 0 {
+			detail = homeSize(gpu.VRAM)
+		}
+		if metrics != nil && i < len(metrics.GPUs) {
+			if used := metrics.GPUs[i].VRAMUsed; used != nil && gpu.VRAM > 0 {
+				detail = homeSize(*used) + " of " + detail
+			}
+			if load := metrics.GPUs[i].Load; load != nil {
+				detail = strings.TrimSpace(fmt.Sprintf("%.0f%%  %s", *load, detail))
+			}
+		}
+		if detail != "" {
+			line(" %s", detail)
+		}
+	}
+	if metrics != nil {
+		for _, temp := range metrics.Temps {
+			line("%s  %.0f C", homeText(temp.Label, 22), temp.C)
+		}
+	}
+	page("Target GPU and heat")
+
+	if top != nil && len(top.Top) > 0 {
+		// The first line says what the figures are: the average over the
+		// window before the answer. The first answer of a session has no
+		// window and no averages; it shows the processor time that each
+		// process has used since its start, or its memory alone when the
+		// target does not tell the time.
+		count := ""
+		if top.ProcessCount > 0 {
+			count = fmt.Sprintf("%.0f procs, ", top.ProcessCount)
+		}
+		switch {
+		case top.WindowS >= 120:
+			line("%s%.0f min avg", count, top.WindowS/60)
+		case top.WindowS > 0:
+			line("%s%.0f s avg", count, max(top.WindowS, 1))
+		default:
+			line("%sCPU time", count)
+		}
+		// The order is the target's: by the average, or without a window
+		// by processor time and then memory.
+		for _, process := range top.Top {
+			name := homeText(process.Name, 15)
+			switch {
+			case top.WindowS > 0:
+				line("%s %.0f%% %s", name, process.CPU, homeSize(process.Mem))
+			case process.CPUTimeMS > 0:
+				line("%s %s %s", name, homeShortTime(process.CPUTimeMS), homeSize(process.Mem))
+			default:
+				line("%s %s", name, homeSize(process.Mem))
+			}
+		}
+	}
+	page("Target processes")
+	return pages
+}
+
+// homeShortTime is a time in milliseconds in a few characters.
+func homeShortTime(ms float64) string {
+	seconds := ms / 1000
+	switch {
+	case seconds >= 100*3600:
+		return fmt.Sprintf("%.0fd", min(seconds/86400, 9999))
+	case seconds >= 3600:
+		return fmt.Sprintf("%.1fh", seconds/3600)
+	case seconds >= 60:
+		return fmt.Sprintf("%.0fm", seconds/60)
+	}
+	return fmt.Sprintf("%.0fs", seconds)
+}
+
+// homeShortRate is a rate in bytes a second as bits, in a few characters.
+func homeShortRate(bytesPerSecond float64) string {
+	kbps := bytesPerSecond * 8 / 1000
+	switch {
+	case kbps >= 1000000:
+		return fmt.Sprintf("%.1f Gb/s", kbps/1000000)
+	case kbps >= 1000:
+		return fmt.Sprintf("%.1f Mb/s", kbps/1000)
+	}
+	return fmt.Sprintf("%.0f kb/s", kbps)
 }
 
 func homeSystemLines() []string {

@@ -39,7 +39,9 @@ const appendStatToMap = <T extends { timestamp: number }>(
 };
 
 // Constants and types
-export type AvailableSidebarViews = "connection-stats";
+export type AvailableSidebarViews =
+  | "connection-stats"
+  | "host-info" // OS Services host information
 export type AvailableTerminalTypes = "kvm" | "serial" | "cdcacm" | "guest" | "none";
 
 export interface User {
@@ -409,6 +411,8 @@ export interface OsServicesSettings {
   resolution: string;
   display_mode: "mirror" | "extend";
   clipboard_enabled: boolean;
+  // Show the target computer's system information in the UI; absent means off.
+  host_info_enabled?: boolean;
 }
 
 export interface OsServicesSettingsEvent {

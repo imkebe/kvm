@@ -1,5 +1,5 @@
 // Package osservices is the KVM side of the IP-KVM OS Services protocol,
-// version 5.0: the reset exchange, the byte-stream parser, the handshake and
+// version 5.1: the reset exchange, the byte-stream parser, the handshake and
 // every service, as a single-threaded state machine (Session). The caller
 // serializes every call and supplies the clock, randomness, the signing key,
 // the IN endpoint and the effects through a Platform.
@@ -17,7 +17,7 @@ import (
 // Protocol version (Versions).
 const (
 	ProtocolMajor = 5
-	ProtocolMinor = 0
+	ProtocolMinor = 1
 )
 
 // USB interface (Transport, USB interface).
@@ -61,7 +61,8 @@ const (
 	ServiceTerminal  = 3
 	ServiceFile      = 4
 	ServiceUpdate    = 5
-	serviceCount     = 6
+	ServiceHostInfo  = 7 // 6 is reserved: it was the camera service
+	serviceCount     = 8
 )
 
 // Session service kinds.
@@ -96,6 +97,45 @@ const (
 	helloTokenOffset  = EnvelopeLen + 4
 	searchTailLen     = helloMessageLen - 1
 	CaptureDisplayMax = infoDisplayMax
+)
+
+// Host info service (minor version 1): kinds, section bits and limits.
+const (
+	hostInfoCapabilities = 1
+	hostInfoSubscribe    = 2
+	hostInfoInventory    = 3
+	hostInfoMetrics      = 4
+	hostInfoQuery        = 5
+	hostInfoResult       = 6
+
+	// The section bits of hostinfo.capabilities.
+	HostInfoSectionInventory = 1 << 0
+	HostInfoSectionMetrics   = 1 << 1
+	HostInfoSectionProcesses = 1 << 2
+	HostInfoSectionUSB       = 1 << 3
+	hostInfoSectionsDefined  = HostInfoSectionInventory | HostInfoSectionMetrics | HostInfoSectionProcesses | HostInfoSectionUSB
+
+	// The sections of hostinfo.query.
+	HostInfoQueryInventory = 1
+	HostInfoQueryProcesses = 2
+	HostInfoQueryUSB       = 3
+	// HostInfoQueryTop is the busiest processes; the sender offers it with
+	// the processes section.
+	HostInfoQueryTop = 4
+
+	hostInfoCapabilitiesLen = 4
+	hostInfoSubscribeLen    = 8
+	hostInfoQueryLen        = 8
+	hostInfoResultHeaderLen = 8
+	hostInfoResultLast      = 1 << 0
+	hostInfoResultError     = 1 << 1
+	// HostInfoMaxJSON is the most JSON in hostinfo.inventory or
+	// hostinfo.metrics.
+	HostInfoMaxJSON = 64 * 1024
+	// hostInfoMaxChunk is the most JSON in one hostinfo.result.
+	hostInfoMaxChunk = 60 * 1024
+	// HostInfoMaxResult is the most JSON in the answer to one query.
+	HostInfoMaxResult = 1024 * 1024
 )
 
 // Video service kinds and fields.
