@@ -70,7 +70,9 @@ export default function SettingsAccessIndexRoute() {
   const [cloudAppUrl, setCloudAppUrl] = useState("");
 
   // Use a simple string identifier for the selected provider
-  const [selectedProvider, setSelectedProvider] = useState<string>("jetkvm");
+  // Only a custom cloud is supported in this build; JetKVM Cloud shows only
+  // for a device that is still adopted to it, so it can be deregistered.
+  const [selectedProvider, setSelectedProvider] = useState<string>("custom");
   const [tlsMode, setTlsMode] = useState<string>("unknown");
   const tls = useCapability("tls");
   const hasTailscale = useCapability("tailscale");
@@ -116,10 +118,12 @@ export default function SettingsAccessIndexRoute() {
       const isAPIJetKVMProd = cloudState.url === "https://api.jetkvm.com";
       const isAppJetKVMProd = cloudState.appUrl === "https://app.jetkvm.com";
 
-      if (isAPIJetKVMProd && isAppJetKVMProd) {
+      if (isAPIJetKVMProd && isAppJetKVMProd && cloudState.connected) {
         setSelectedProvider("jetkvm");
       } else {
         setSelectedProvider("custom");
+        if (isAPIJetKVMProd) setCloudApiUrl("");
+        if (isAppJetKVMProd) setCloudAppUrl("");
       }
     });
   }, [send]);
@@ -392,7 +396,11 @@ export default function SettingsAccessIndexRoute() {
                   value={selectedProvider}
                   onChange={e => handleProviderChange(e.target.value)}
                   options={[
-                    { value: "jetkvm", label: m.access_provider_jetkvm() },
+                    {
+                      value: "jetkvm",
+                      label: m.access_provider_jetkvm_unsupported(),
+                      disabled: true,
+                    },
                     { value: "custom", label: m.access_provider_custom() },
                   ]}
                 />
