@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -172,14 +171,16 @@ func (s *SelfSigner) GetCertificate(info *tls.ClientHelloInfo) (*tls.Certificate
 	if info.ServerName != "" && info.ServerName != selfSignerCAMagicName {
 		hostname = info.ServerName
 	} else {
-		hostname = strings.Split(info.Conn.LocalAddr().String(), ":")[0]
+		hostname, _, _ = net.SplitHostPort(info.Conn.LocalAddr().String())
 	}
 
 	s.log.Info().Str("hostname", hostname).Strs("supported_protos", info.SupportedProtos).Msg("TLS handshake")
 
 	// convert hostname to punycode
 	h, err := idna.Lookup.ToASCII(hostname)
-	if err != nil {
+	if net.ParseIP(hostname) != nil {
+		// an IP address stays as it is: idna refuses IPv6 literals
+	} else if err != nil {
 		s.log.Warn().Str("hostname", hostname).Err(err).Str("remote_addr", info.Conn.RemoteAddr().String()).Msg("Hostname is not valid")
 		hostname = s.DefaultDomain
 	} else {

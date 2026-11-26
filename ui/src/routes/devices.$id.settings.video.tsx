@@ -297,6 +297,9 @@ export default function SettingsVideoRoute() {
               <SelectMenuBasic
                 size="SM"
                 label=""
+                // The long description would squeeze the select down to
+                // its first letter.
+                className="min-w-40"
                 value={codecPreference}
                 options={codecOptions}
                 disabled={supportedCodecs === null}
