@@ -7,7 +7,6 @@ import validator from "validator";
 
 import WifiNetworksCard from "@components/WifiNetworksCard";
 import PublicIPCard from "@components/PublicIPCard";
-import TailscaleCard from "@components/TailscaleCard";
 import {
   NetworkSettings,
   NetworkState,
@@ -18,7 +17,7 @@ import {
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
 import { useNetworkDiscovery } from "@hooks/useNetworkDiscovery";
 import AutoHeight from "@components/AutoHeight";
-import { Button } from "@components/Button";
+import { Button, LinkButton } from "@components/Button";
 import { Checkbox } from "@components/Checkbox";
 import { ConfirmDialog } from "@components/ConfirmDialog";
 import CustomTimeSyncCard from "@components/CustomTimeSyncCard";
@@ -103,6 +102,7 @@ export default function SettingsNetworkRoute() {
   const hasIpv6 = useCapability("ipv6");
   const hasWifi = useCapability("wifi");
   const hasTailscale = useCapability("tailscale");
+  const hasNetbird = useCapability("netbird");
   const setNetworkState = useNetworkStateStore(state => state.setNetworkState);
 
   // Some input needs direct state management. Mostly options that open more details
@@ -683,7 +683,14 @@ export default function SettingsNetworkRoute() {
 
               {isCloudAdopted && <PublicIPCard />}
 
-              {hasTailscale && <TailscaleCard />}
+              {(hasTailscale || hasNetbird) && (
+                <SettingsItem
+                  title={m.network_vpn_title()}
+                  description={m.network_vpn_description()}
+                >
+                  <LinkButton to="../access" size="SM" theme="light" text={m.network_vpn_open()} />
+                </SettingsItem>
+              )}
 
               <div>
                 <AutoHeight>

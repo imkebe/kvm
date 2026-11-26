@@ -27,6 +27,8 @@ import {
   USBStates,
   useHidStore,
   useStorageDownloadStore,
+  useNetbirdStore,
+  NetbirdState,
   useNetworkStateStore,
   User,
   useRTCStore,
@@ -188,6 +190,7 @@ export default function KvmIdRoute() {
   const navigate = useNavigate();
   const { otaState, setOtaState, setModalView } = useUpdateStore();
   const setStorageDownload = useStorageDownloadStore(state => state.setDownload);
+  const setNetbirdState = useNetbirdStore(state => state.setState);
 
   // Everything that must be part of the initial offer is attached here; the
   // signaling adapter owns the peer connection itself.
@@ -470,6 +473,10 @@ export default function KvmIdRoute() {
 
     if (resp.method === "storageDownloadState") {
       setStorageDownload(resp.params as StorageDownloadState);
+    }
+
+    if (resp.method === "netbirdState") {
+      setNetbirdState(resp.params as NetbirdState);
     }
 
     if (resp.method === "otaState") {

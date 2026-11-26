@@ -160,6 +160,7 @@ type Config struct {
 	MqttConfig           *MQTTConfig          `json:"mqtt_config"`
 	AudioEnabled         bool                 `json:"audio_enabled"`
 	OSServices           *OSServicesConfig    `json:"os_services"`
+	Netbird          *NetbirdConfig    `json:"netbird,omitempty"`
 }
 
 // GetUpdateAPIURL returns the update API URL

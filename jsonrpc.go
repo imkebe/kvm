@@ -123,7 +123,7 @@ func onRPCMessage(message webrtc.DataChannelMessage, session *Session) {
 
 	scopedLogger := jsonRpcLogger.With().
 		Str("method", request.Method).
-		Interface("params", request.Params).
+		Str("params", summarizeAPIArgMap(request.Params)).
 		Interface("id", request.ID).Logger()
 
 	scopedLogger.Trace().Msg("Received RPC request")
@@ -441,7 +441,8 @@ type SSHKeyState struct {
 // be changed; the Network page hides those a device does not report.
 // tls, local_loopback, log_level, tailscale: the HTTPS setting (Access page),
 // the loopback-only setting and the default log level (Advanced page) and the
-// Tailscale card (Network page), each shown only when reported.
+// Tailscale card (Access page), each shown only when reported.
+// netbird: the NetBird client can be installed and run (Access page card).
 // storage_download: the device can download an image from a URL into its
 // storage (startStorageDownload); the mount page hides the control without it.
 func rpcGetDeviceCapabilities() ([]string, error) {
@@ -452,6 +453,7 @@ func rpcGetDeviceCapabilities() ([]string, error) {
 		"usb_virtual_devices",
 		"usb_virtual_microphone",
 		"storage_download",
+		"netbird",
 	}
 	if osServices != nil {
 		capabilities = append(capabilities, "os_services")
@@ -1710,6 +1712,11 @@ var rpcHandlers = map[string]RPCHandler{
 	"getTailscaleStatus":         {Func: rpcGetTailscaleStatus},
 	"getTailscaleControlURL":     {Func: rpcGetTailscaleControlURL},
 	"setTailscaleControlURL":     {Func: rpcSetTailscaleControlURL, Params: []string{"controlURL"}},
+	"getNetbirdState":            {Func: rpcGetNetbirdState},
+	"installNetbird":             {Func: rpcInstallNetbird},
+	"removeNetbird":              {Func: rpcRemoveNetbird},
+	"netbirdJoin":                {Func: rpcNetbirdJoin, Params: []string{"managementURL"}, OptionalParams: []string{"setupKey"}},
+	"netbirdLeave":               {Func: rpcNetbirdLeave},
 	"getMqttSettings":            {Func: rpcGetMqttSettings},
 	"setMqttSettings":            {Func: rpcSetMqttSettings, Params: []string{"settings"}},
 	"getMqttStatus":              {Func: rpcGetMqttStatus},
