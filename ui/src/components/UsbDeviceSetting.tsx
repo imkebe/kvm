@@ -28,6 +28,7 @@ export interface UsbDeviceConfig {
   mass_storage: boolean;
   serial_console: boolean;
   video: boolean;
+  network: boolean;
   audio: boolean;
   microphone: boolean;
 }
@@ -45,6 +46,7 @@ const none: UsbDeviceConfig = {
   mass_storage: false,
   serial_console: false,
   video: false,
+  network: false,
   audio: false,
   microphone: false,
 };
@@ -106,6 +108,12 @@ const usbPresets: UsbPreset[] = [
     description: m.usb_preset_media_description(),
     config: { ...none, ...hid, video: true, microphone: true, audio: true },
   },
+  {
+    label: m.usb_preset_network(),
+    value: "network",
+    description: m.usb_preset_network_description(),
+    config: { ...none, ...hid, network: true },
+  },
   { label: m.usb_device_custom(), value: "custom" },
 ];
 
@@ -133,6 +141,8 @@ function endpointLabel(name: string) {
       return m.usb_endpoint_serial_console();
     case "video":
       return m.usb_endpoint_video();
+    case "network":
+      return m.usb_endpoint_network();
     case "os_services":
       return m.usb_endpoint_os_services();
     case "spare":
@@ -151,6 +161,7 @@ const featureGroup: Record<FeatureKey, string | null> = {
   mass_storage: "mass_storage",
   serial_console: "serial_console",
   video: "video",
+  network: "network",
   audio: null,
   microphone: "microphone",
 };
@@ -389,6 +400,11 @@ export function UsbDeviceSetting() {
           key: "video",
           title: m.usb_device_enable_video_title(),
           description: m.usb_device_enable_video_description(),
+        },
+        {
+          key: "network",
+          title: m.usb_device_enable_network_title(),
+          description: m.usb_device_enable_network_description(),
         },
         ...(usbSerial
           ? [

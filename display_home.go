@@ -46,6 +46,9 @@ var (
 	homeCardResend bool
 )
 
+// homeNetwork is the USB network state, read once per refresh.
+var homeNetwork USBNetworkState
+
 // homeHistoryLen is the number of readings, one a second, that a chart
 // shows.
 const homeHistoryLen = 60
@@ -66,17 +69,23 @@ type homeRateSample struct {
 	at           time.Time
 	videoFrames  uint64
 	videoBytes   uint64
+	netRx        uint64
+	netTx        uint64
 	cameraFrames uint64
 	cpuBusy      uint64
 	cpuTotal     uint64
 	// The rates between the last two readings.
 	videoFPS  float64
 	videoKbps float64
+	netRxKbps float64
+	netTxKbps float64
 	cameraFPS float64
 	cpu       float64
 
 	videoKbpsHistory homeHistory
 	videoFPSHistory  homeHistory
+	netRxHistory     homeHistory
+	netTxHistory     homeHistory
 	cameraHistory    homeHistory
 	cpuHistory       homeHistory
 	memoryHistory    homeHistory
@@ -168,6 +177,7 @@ func homeScreenRefresh(sample, cards bool) {
 	}
 	homeScreenMu.Lock()
 	defer homeScreenMu.Unlock()
+	homeNetwork = rpcGetUSBNetworkState()
 	if sample {
 		homeSampleRates()
 	}
@@ -255,6 +265,8 @@ func homeStatus() string {
 	chip("CAM", homeEnabled(devices.Video, configured && camera.USBStreaming, failed, camera.LastError))
 	chip("SER", homeEnabled(devices.SerialConsole, configured, failed, ""))
 
+	chip("NET", homeEnabled(devices.Network, configured && homeNetwork.LinkUp, failed, homeNetwork.LastError))
+
 	_, connected := homeOSServices()
 	chip("OSS", homeEnabled(osServicesUSBEnabled(), connected, failed, ""))
 
@@ -310,6 +322,8 @@ func homeSampleRates() {
 	if !sample.at.IsZero() && seconds < 10 {
 		sample.videoFPS = float64(frames-sample.videoFrames) / seconds
 		sample.videoKbps = float64(bytes-sample.videoBytes) * 8 / 1000 / seconds
+		sample.netRxKbps = float64(homeNetwork.RxBytes-sample.netRx) * 8 / 1000 / seconds
+		sample.netTxKbps = float64(homeNetwork.TxBytes-sample.netTx) * 8 / 1000 / seconds
 		sample.cameraFPS = 0
 		if camera >= sample.cameraFrames {
 			sample.cameraFPS = float64(camera-sample.cameraFrames) / seconds
@@ -320,11 +334,14 @@ func homeSampleRates() {
 	}
 	sample.at = now
 	sample.videoFrames, sample.videoBytes = frames, bytes
+	sample.netRx, sample.netTx = homeNetwork.RxBytes, homeNetwork.TxBytes
 	sample.cameraFrames = camera
 	sample.cpuBusy, sample.cpuTotal = busy, total
 
 	sample.videoKbpsHistory.push(sample.videoKbps)
 	sample.videoFPSHistory.push(sample.videoFPS)
+	sample.netRxHistory.push(sample.netRxKbps)
+	sample.netTxHistory.push(sample.netTxKbps)
 	sample.cameraHistory.push(sample.cameraFPS)
 	sample.cpuHistory.push(sample.cpu)
 	if memTotal, available := homeMemory(); memTotal > 0 {
@@ -467,6 +484,20 @@ func homeCards() string {
 			homePage("Camera state", mode, reader,
 				fmt.Sprintf("%d frames", camera.FramesWritten),
 				fmt.Sprintf("%d dropped", camera.DroppedFrames)))
+	}
+
+	if devices.Network {
+		address := homeText(homeNetwork.AddressCIDR, 20)
+		link := "link down"
+		if homeNetwork.LinkUp {
+			link = "link up"
+		}
+		add(homePage("USB network", strings.TrimSpace(address+"  "+link),
+			homeChart(0, 100, green, rates.netRxHistory, blue, rates.netTxHistory)),
+			homePage("USB network in", homeRate(rates.netRxKbps), homeChart(0, 100, green, rates.netRxHistory)),
+			homePage("USB network out", homeRate(rates.netTxKbps), homeChart(0, 100, blue, rates.netTxHistory)),
+			homePage("USB network totals", "Address: "+address, link,
+				"In: "+homeBytes(homeNetwork.RxBytes), "Out: "+homeBytes(homeNetwork.TxBytes)))
 	}
 
 	var audio []string

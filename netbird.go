@@ -57,6 +57,8 @@ type NetbirdConfig struct {
 	// ManagementURL is "" for NetBird Cloud.
 	ManagementURL string `json:"management_url,omitempty"`
 	Hostname      string `json:"hostname,omitempty"`
+	// Target is the USB Ethernet target's own peer (netbird_target.go).
+	Target *NetbirdTargetConfig `json:"target,omitempty"`
 }
 
 type NetbirdInstallState struct {
@@ -81,6 +83,7 @@ type NetbirdState struct {
 	Error         string              `json:"error,omitempty"`
 	UsbShare      bool                `json:"usbShare"`
 	UsbNetworkOn  bool                `json:"usbNetworkOn"`
+	Target        NetbirdTargetState  `json:"target"`
 }
 
 type netbirdDaemon struct {
@@ -128,6 +131,7 @@ type netbirdManager struct {
 
 	fastUntil  time.Time
 	lastPushed string
+	lastUplink string
 }
 
 var netbirdMgr = &netbirdManager{
@@ -144,6 +148,7 @@ var netbirdMgr = &netbirdManager{
 // sends the target's NetBird names.
 const (
 	netbirdResolverAddr       = "127.0.0.1:5053"
+	netbirdTargetResolverAddr = "127.0.0.1:5054"
 )
 
 // ensureResolverConfig puts resolverAddr into the config file; it reports
@@ -212,6 +217,7 @@ func initNetbird() {
 		}
 		m.loop()
 	}()
+	initNetbirdTarget()
 }
 
 func (m *netbirdManager) nudge() {
@@ -574,6 +580,13 @@ func (m *netbirdManager) waitForDaemon(ctx context.Context) error {
 
 func (m *netbirdManager) State() NetbirdState {
 	settings := netbirdSettings()
+	var usbCfg USBNetworkConfig
+	var usbState USBNetworkState
+	if usbNetwork != nil {
+		usbCfg = usbNetwork.Config()
+		usbState = usbNetwork.State()
+	}
+	target := netbirdTargetMgr.targetState()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -589,6 +602,9 @@ func (m *netbirdManager) State() NetbirdState {
 		AuthURL:       m.authURL,
 		Status:        m.status,
 		Error:         m.lastError,
+		UsbShare:      usbCfg.Mode == usbUplinkNetbird,
+		UsbNetworkOn:  usbState.Running,
+		Target:        target,
 	}
 	if state.ManagementURL == "" {
 		state.ManagementURL = netbird.DefaultManagementURL
@@ -604,7 +620,16 @@ func (m *netbirdManager) State() NetbirdState {
 // address is the target's gateway).
 func (m *netbirdManager) publish() {
 	m.mu.Lock()
+	ip := ""
+	if m.status != nil {
+		ip = m.status.IPNet
+	}
+	ipChanged := ip != m.lastUplink
+	m.lastUplink = ip
 	m.mu.Unlock()
+	if ipChanged {
+		netbirdTargetMgr.nudge()
+	}
 
 	state := netbirdMgr.State()
 	data, _ := json.Marshal(state)
@@ -890,6 +915,7 @@ func rpcRemoveNetbird() (NetbirdState, error) {
 	if _, err := rpcNetbirdLeave(); err != nil {
 		return m.State(), err
 	}
+	stopNetbirdTarget()
 	if err := os.RemoveAll(netbirdDir); err != nil {
 		return m.State(), err
 	}

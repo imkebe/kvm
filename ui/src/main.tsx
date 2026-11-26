@@ -52,6 +52,9 @@ const SettingsHardwareUsbRoute = lazy(() => import("@routes/devices.$id.settings
 const SettingsHardwareCameraRoute = lazy(
   () => import("@routes/devices.$id.settings.hardware.camera"),
 );
+const SettingsHardwareNetworkRoute = lazy(
+  () => import("@routes/devices.$id.settings.hardware.network"),
+);
 const SettingsHardwareMicrophoneRoute = lazy(
   () => import("@routes/devices.$id.settings.hardware.microphone"),
 );
@@ -197,6 +200,7 @@ const getDeviceRoute = (r: Omit<RouteObject, "children" | "index">): RouteObject
             { index: true, element: <SettingsHardwareIndexRoute /> },
             { path: "usb", element: <SettingsHardwareUsbRoute /> },
             { path: "camera", element: <SettingsHardwareCameraRoute /> },
+            { path: "network", element: <SettingsHardwareNetworkRoute /> },
             { path: "microphone", element: <SettingsHardwareMicrophoneRoute /> },
           ],
         },

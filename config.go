@@ -160,6 +160,7 @@ type Config struct {
 	MqttConfig           *MQTTConfig          `json:"mqtt_config"`
 	AudioEnabled         bool                 `json:"audio_enabled"`
 	OSServices           *OSServicesConfig    `json:"os_services"`
+	USBNetworkConfig *USBNetworkConfig `json:"usb_network_config,omitempty"`
 	Netbird          *NetbirdConfig    `json:"netbird,omitempty"`
 }
 
@@ -218,6 +219,7 @@ var (
 		MassStorage:   true,
 		SerialConsole: false,
 		Video:         false,
+		Network:       false,
 		Audio:         true,
 	}
 )

@@ -835,8 +835,13 @@ func rpcSetUsbConfig(usbConfig usbgadget.Config) error {
 	}
 	// The function names are set with setUsbFunctionNames; the identity
 	// form does not send them.
+	// Nor the USB network function and addresses, which belong to the USB
+	// Ethernet settings.
 	if config.UsbConfig != nil {
 		usbConfig.Names = config.UsbConfig.Names
+		usbConfig.NetworkFunction = config.UsbConfig.NetworkFunction
+		usbConfig.NetworkHostAddr = config.UsbConfig.NetworkHostAddr
+		usbConfig.NetworkDevAddr = config.UsbConfig.NetworkDevAddr
 	}
 	config.UsbConfig = &usbConfig
 	gadget.SetGadgetConfig(config.UsbConfig)
@@ -1094,6 +1099,11 @@ func rpcGetUsbEndpointUsage(devices usbgadget.Devices) (usbgadget.INEndpointUsag
 
 func updateUsbRelatedConfig() error {
 	setUSBRecoveryTimer(time.Now())
+	if usbNetwork != nil {
+		if err := usbNetwork.SuspendForGadgetChange(); err != nil {
+			return fmt.Errorf("failed to suspend USB network: %w", err)
+		}
+	}
 	if virtualVideo != nil {
 		virtualVideo.mu.Lock()
 		virtualVideo.closeDeviceLocked()
@@ -1118,6 +1128,18 @@ func updateUsbRelatedConfig() error {
 	}
 	if virtualVideo != nil && !config.UsbDevices.Video {
 		virtualVideo.Stop()
+	}
+	if usbNetwork != nil && !config.UsbDevices.Network {
+		usbNetwork.Stop()
+		cfg := usbNetwork.Config()
+		config.USBNetworkConfig = &cfg
+	}
+	if usbNetwork != nil && config.UsbDevices.Network && usbNetwork.Config().Enabled {
+		if _, err := usbNetwork.Start(); err != nil {
+			return fmt.Errorf("failed to resume USB network: %w", err)
+		}
+		cfg := usbNetwork.Config()
+		config.USBNetworkConfig = &cfg
 	}
 	// Reset recovery timer so auto-recovery doesn't interfere during
 	// the host's USB re-enumeration window after a deliberate config change.
@@ -1174,6 +1196,8 @@ func rpcSetUsbDeviceState(device string, enabled bool) error {
 		devices.Video = enabled
 	case "microphone":
 		devices.Microphone = enabled
+	case "network":
+		devices.Network = enabled
 	case "audio":
 		devices.Audio = enabled
 	default:
@@ -1696,6 +1720,11 @@ var rpcHandlers = map[string]RPCHandler{
 	"setVirtualVideoConfig":      {Func: rpcSetVirtualVideoConfig, Params: []string{"config"}},
 	"startVirtualVideo":          {Func: rpcStartVirtualVideo},
 	"stopVirtualVideo":           {Func: rpcStopVirtualVideo},
+	"getUsbNetworkState":         {Func: rpcGetUSBNetworkState},
+	"getUsbNetworkAdapters":      {Func: rpcGetUSBNetworkAdapters},
+	"setUsbNetworkConfig":        {Func: rpcSetUSBNetworkConfig, Params: []string{"config"}},
+	"startUsbNetwork":            {Func: rpcStartUSBNetwork},
+	"stopUsbNetwork":             {Func: rpcStopUSBNetwork},
 	"setCloudUrl":                {Func: rpcSetCloudUrl, Params: []string{"apiUrl", "appUrl"}},
 	"getKeyboardLayout":          {Func: rpcGetKeyboardLayout},
 	"setKeyboardLayout":          {Func: rpcSetKeyboardLayout, Params: []string{"layout"}},
@@ -1717,6 +1746,9 @@ var rpcHandlers = map[string]RPCHandler{
 	"removeNetbird":              {Func: rpcRemoveNetbird},
 	"netbirdJoin":                {Func: rpcNetbirdJoin, Params: []string{"managementURL"}, OptionalParams: []string{"setupKey"}},
 	"netbirdLeave":               {Func: rpcNetbirdLeave},
+	"setUsbNetworkMode":          {Func: rpcSetUsbNetworkMode, Params: []string{"mode"}},
+	"netbirdTargetJoin":          {Func: rpcNetbirdTargetJoin, Params: []string{"setupKey"}, OptionalParams: []string{"hostname"}},
+	"netbirdTargetLeave":         {Func: rpcNetbirdTargetLeave},
 	"getMqttSettings":            {Func: rpcGetMqttSettings},
 	"setMqttSettings":            {Func: rpcSetMqttSettings, Params: []string{"settings"}},
 	"getMqttStatus":              {Func: rpcGetMqttStatus},

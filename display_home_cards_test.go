@@ -50,17 +50,20 @@ func homeTestScreen(t *testing.T) *homeNative {
 	t.Helper()
 	savedConfig, savedNative, savedBacklight := config, nativeInstance, backlightState
 	savedSent := homeScreenSent
+	savedNetwork := usbNetwork
 	savedAudio := virtualAudio
 	savedPage, savedPageResend := homeCardChosen, homeCardResend
 	t.Cleanup(func() {
 		config, nativeInstance, backlightState = savedConfig, savedNative, savedBacklight
 		homeScreenSent = savedSent
+		usbNetwork = savedNetwork
 		virtualAudio = savedAudio
 		homeCardChosen, homeCardResend = savedPage, savedPageResend
 	})
 	screen := &homeNative{set: map[string]int{}}
 	config = &Config{UsbDevices: &usbgadget.Devices{}}
 	nativeInstance = screen
+	usbNetwork = newUSBNetworkManager()
 	virtualAudio = audio.NewMicrophone(func() bool { return false }, nil)
 	homeScreenSent = [3]string{}
 	homeCardChosen, homeCardResend = "", false

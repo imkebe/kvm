@@ -22,6 +22,22 @@ func TestVirtualDevicesTransactionHasNoDuplicateChanges(t *testing.T) {
 	}
 }
 
+func TestNetworkFunctionSelection(t *testing.T) {
+	u := &UsbGadget{enabledDevices: Devices{Network: true}}
+	for _, function := range []string{"", "ncm", "ecm", "rndis"} {
+		u.customConfig.NetworkFunction = function
+		want := function
+		if want == "" {
+			want = "ncm"
+		}
+		for _, candidate := range []string{"ncm", "ecm", "rndis"} {
+			if got := u.isGadgetConfigItemEnabled("network_" + candidate); got != (candidate == want) {
+				t.Fatalf("function %q enabled %s = %v", function, candidate, got)
+			}
+		}
+	}
+}
+
 // UVC configfs renders bcdUVC as decimal and rejects writes once class links
 // reference the header, even after the camera is disabled. Re-enabling must
 // reuse this descriptor rather than issue a formatting-only update.

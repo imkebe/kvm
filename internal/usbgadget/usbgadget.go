@@ -40,6 +40,11 @@ type Config struct {
 	Product       string `json:"product"`
 	Configuration string `json:"configuration"`
 
+	NetworkFunction string `json:"network_function,omitempty"`
+	// NetworkHostAddr and NetworkDevAddr are the USB network function's MAC
+	// addresses, the target's end and the KVM's; empty keeps the defaults.
+	NetworkHostAddr string `json:"network_host_addr,omitempty"`
+	NetworkDevAddr  string `json:"network_dev_addr,omitempty"`
 	VideoCodec      string `json:"video_codec,omitempty"`
 	// VideoSize is the one MJPEG frame size the USB camera offers, a key of
 	// VideoFrameSizes ("360" … "1080"). Empty: it offers all and the host picks.
