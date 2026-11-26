@@ -21,8 +21,10 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/guregu/null/v6 v6.0.0
 	github.com/gwatts/rootcerts v0.0.0-20261023005650-8a3e0a514d7e
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/insomniacslk/dhcp v0.0.0-20250919081422-f80a1952f48e
 	github.com/mdlayher/ndp v1.1.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pion/ice/v4 v4.1.0
 	github.com/pion/interceptor v0.1.42
 	github.com/pion/logging v0.2.4
@@ -67,6 +69,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.27.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
+	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
@@ -97,16 +100,20 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

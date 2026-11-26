@@ -13,8 +13,10 @@ import Container from "@components/Container";
 import { LinkButton } from "@components/Button";
 import PeerConnectionStatusCard from "@components/PeerConnectionStatusCard";
 import USBStateStatus from "@components/USBStateStatus";
+import McpStatusCard from "@components/McpStatusCard";
 import NetbirdStatusCard from "@components/NetbirdStatusCard";
 import VideoSourceStatus from "@components/VideoSourceStatus";
+import DeviceStatusButton from "@components/popovers/DeviceStatusButton";
 import { CLOUD_API, DEVICE_API } from "@/ui.config";
 import api from "@/api";
 import { isOnDevice } from "@/main";
@@ -98,6 +100,7 @@ export default function DashboardNavbar({
                       <PeerConnectionStatusCard
                         state={peerConnectionState}
                         title={kvmName}
+                        action={<DeviceStatusButton />}
                       />
                     </div>
                     <div className="hidden w-[159px] md:block">
@@ -106,6 +109,11 @@ export default function DashboardNavbar({
                     {peerConnectionState === "connected" && (
                       <div className="hidden w-[204px] md:block">
                         <VideoSourceStatus />
+                      </div>
+                    )}
+                    {peerConnectionState === "connected" && (
+                      <div className="hidden w-[170px] lg:block">
+                        <McpStatusCard />
                       </div>
                     )}
                     {peerConnectionState === "connected" && <NetbirdStatusCard />}

@@ -42,6 +42,7 @@ const appendStatToMap = <T extends { timestamp: number }>(
 export type AvailableSidebarViews =
   | "connection-stats"
   | "host-info" // OS Services host information
+  | "api-calls"; // calls made through the device API and MCP
 export type AvailableTerminalTypes = "kvm" | "serial" | "cdcacm" | "guest" | "none";
 
 export interface User {

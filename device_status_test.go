@@ -18,4 +18,15 @@ func TestDeviceStatsAndMcpActivity(t *testing.T) {
 	if stats.CPUPercent < 0 || stats.CPUPercent > 100 || stats.MemTotalKB == 0 || stats.MemAvailKB > stats.MemTotalKB {
 		t.Fatalf("stats %+v", stats)
 	}
+	token, _ := rpcCreateAPIToken("t", []string{"device"}, 0)
+	if _, err := checkAPIToken(token.Token); err != nil {
+		t.Fatal(err)
+	}
+	before := deviceAPICalls.Load()
+	deviceAPICall([]byte(`{"jsonrpc":"2.0","id":1,"method":"ping"}`), "test")
+	a, _ := rpcGetMcpActivity()
+	if !a.DeviceAPIEnabled || a.Tokens != 1 || a.TokensActive != 1 || a.LastTokenName != "t" ||
+		a.DeviceAPICalls != before+1 || a.DeviceAPILastCall == 0 {
+		t.Fatalf("activity %+v", a)
+	}
 }
