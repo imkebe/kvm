@@ -183,6 +183,7 @@ func setupRouter() *gin.Engine {
 	// open when localAuthMode is noPassword (consistent with other endpoints).
 	r.GET("/metrics", metricsAuthMiddleware(), gin.WrapH(promhttp.Handler()))
 
+	r.POST(deviceAPIPath, apiAuthMiddleware(APIScopeDevice, "JetKVM device API"), handleDeviceAPI)
 	// Developer mode protected routes
 	developerModeRouter := r.Group("/developer/")
 	developerModeRouter.Use(basicAuthProtectedMiddleware(true))
@@ -597,6 +598,22 @@ func sendErrorJsonThenAbort(c *gin.Context, status int, message string) {
 // localAuthMode is noPassword, all requests are allowed through — consistent
 // with every other endpoint on the device.
 func metricsAuthMiddleware() gin.HandlerFunc {
+	basic := cookieOrBasicAuthMiddleware("JetKVM Metrics")
+	token := apiAuthMiddleware(APIScopeMetrics, "JetKVM Metrics")
+	return func(c *gin.Context) {
+		// An API token with the metrics scope works as a Prometheus bearer token.
+		if strings.HasPrefix(c.GetHeader("Authorization"), "Bearer ") {
+			token(c)
+			return
+		}
+		basic(c)
+	}
+}
+
+// cookieOrBasicAuthMiddleware lets a request in with the session cookie or
+// with the password as HTTP basic auth, which leaves the browser's token as
+// it is.
+func cookieOrBasicAuthMiddleware(realm string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if config.LocalAuthMode == "noPassword" {
 			c.Next()
@@ -624,7 +641,7 @@ func metricsAuthMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		c.Header("WWW-Authenticate", `Basic realm="JetKVM Metrics"`)
+		c.Header("WWW-Authenticate", `Basic realm="`+realm+`"`)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		c.Abort()
 	}

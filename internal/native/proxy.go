@@ -725,6 +725,15 @@ func (p *NativeProxy) SwitchToScreenIfDifferent(screenName string) {
 	})
 }
 
+func (p *NativeProxy) VideoSnapshot(req SnapshotRequest) (Snapshot, error) {
+	p.clientMu.RLock()
+	defer p.clientMu.RUnlock()
+	if p.client == nil {
+		return Snapshot{}, fmt.Errorf("gRPC client not initialized")
+	}
+	return p.client.VideoSnapshot(req)
+}
+
 func (p *NativeProxy) DoNotUseThisIsForCrashTestingOnly() {
 	_ = nativeProxyClientExecWithoutArgument(p, func(client *GRPCClient) error {
 		client.DoNotUseThisIsForCrashTestingOnly()

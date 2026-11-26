@@ -1,5 +1,7 @@
 package native
 
+import "errors"
+
 type EmptyNativeInterface struct {
 }
 
@@ -115,5 +117,9 @@ func (e *EmptyNativeInterface) UpdateLabelAndChangeVisibility(objName string, ne
 func (e *EmptyNativeInterface) SwitchToScreenIf(screenName string, shouldSwitch []string) {}
 
 func (e *EmptyNativeInterface) SwitchToScreenIfDifferent(screenName string) {}
+
+func (e *EmptyNativeInterface) VideoSnapshot(req SnapshotRequest) (Snapshot, error) {
+	return Snapshot{}, errors.New("video is not available")
+}
 
 func (e *EmptyNativeInterface) DoNotUseThisIsForCrashTestingOnly() {}

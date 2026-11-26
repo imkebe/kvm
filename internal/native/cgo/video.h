@@ -1,6 +1,8 @@
 #ifndef VIDEO_DAEMON_VIDEO_H
 #define VIDEO_DAEMON_VIDEO_H
 
+#include <stdint.h>
+
 /**
  * @brief Initialize the video subsystem
  *
@@ -61,5 +63,16 @@ void video_set_codec_type(int type);
  * @brief Get the codec type (0 = H.264, 1 = H.265)
  */
 int video_get_codec_type();
+
+/**
+ * @brief Copy the next captured frame (YUYV 4:2:2, limited range)
+ *
+ * Waits up to timeout_ms for the capture loop, which runs only while video
+ * streams. On success *data is a malloc'd buffer of stride * height bytes
+ * that the caller frees.
+ *
+ * @return 0 on success, -1 on timeout, -2 if the frame could not be copied
+ */
+int video_snapshot(uint8_t **data, uint32_t *width, uint32_t *height, uint32_t *stride, int timeout_ms);
 
 #endif //VIDEO_DAEMON_VIDEO_H

@@ -22,6 +22,7 @@ service NativeService {
   rpc VideoLogStatus(Empty) returns (VideoLogStatusResponse);
   rpc VideoStop(Empty) returns (Empty);
   rpc VideoStart(Empty) returns (Empty);
+  rpc VideoSnapshot(VideoSnapshotRequest) returns (VideoSnapshotResponse);
 
   // UI methods
   rpc GetLVGLVersion(Empty) returns (GetLVGLVersionResponse);
@@ -108,6 +109,33 @@ message VideoGetEDIDResponse {
 
 message VideoLogStatusResponse {
   string status = 1;
+}
+
+// A screenshot of the HDMI input: a region in screen pixels (zero width or
+// height reaches the edge), scaled down to fit max_width x max_height (zero:
+// no limit), encoded as "jpeg" (default) or "png".
+message VideoSnapshotRequest {
+  int32 x = 1;
+  int32 y = 2;
+  int32 width = 3;
+  int32 height = 4;
+  int32 max_width = 5;
+  int32 max_height = 6;
+  string format = 7;
+  int32 quality = 8;
+}
+
+message VideoSnapshotResponse {
+  bytes image = 1;
+  string mime_type = 2;
+  int32 screen_width = 3;
+  int32 screen_height = 4;
+  int32 x = 5;
+  int32 y = 6;
+  int32 width = 7;
+  int32 height = 8;
+  int32 image_width = 9;
+  int32 image_height = 10;
 }
 
 message GetLVGLVersionResponse {

@@ -1031,6 +1031,7 @@ export type Capability =
   | "tailscale" // Tailscale client
   | "netbird" // NetBird client the device installs and runs (Network page card)
   | "os_services" // USB link to the OS Services sender on the remote host (clipboard, file drop, shell)
+  | "device_api" // JSON-RPC over HTTP for programs (POST /api/rpc), switched in the advanced settings
   | "storage_download"; // device downloads an image from a URL into its storage
 
 export const useDeviceStore = create<DeviceState>(set => ({

@@ -2,6 +2,9 @@ package native
 
 import (
 	"context"
+	"time"
+
+	"google.golang.org/grpc"
 
 	pb "github.com/jetkvm/kvm/internal/native/proto"
 )
@@ -218,6 +221,32 @@ func (c *GRPCClient) SwitchToScreenIf(screenName string, shouldSwitch []string) 
 
 func (c *GRPCClient) SwitchToScreenIfDifferent(screenName string) {
 	_, _ = c.client.SwitchToScreenIfDifferent(context.Background(), &pb.SwitchToScreenIfDifferentRequest{ScreenName: screenName})
+}
+
+func (c *GRPCClient) VideoSnapshot(req SnapshotRequest) (Snapshot, error) {
+	// Up to 5 s waking the capture chip, 5 s for a frame, then encoding.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	resp, err := c.client.VideoSnapshot(ctx, &pb.VideoSnapshotRequest{
+		X: int32(req.X), Y: int32(req.Y), Width: int32(req.Width), Height: int32(req.Height),
+		MaxWidth: int32(req.MaxWidth), MaxHeight: int32(req.MaxHeight),
+		Format: req.Format, Quality: int32(req.Quality),
+	}, grpc.MaxCallRecvMsgSize(16<<20))
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return Snapshot{
+		Image:        resp.Image,
+		MimeType:     resp.MimeType,
+		ScreenWidth:  int(resp.ScreenWidth),
+		ScreenHeight: int(resp.ScreenHeight),
+		X:            int(resp.X),
+		Y:            int(resp.Y),
+		Width:        int(resp.Width),
+		Height:       int(resp.Height),
+		ImageWidth:   int(resp.ImageWidth),
+		ImageHeight:  int(resp.ImageHeight),
+	}, nil
 }
 
 func (c *GRPCClient) DoNotUseThisIsForCrashTestingOnly() {
