@@ -363,6 +363,31 @@ func (m *VirtualVideoManager) handleFrameDataLocked(data []byte, transport strin
 	if !m.config.Enabled {
 		return nil
 	}
+	if m.config.Codec == "h264" && (frame.Width != m.config.Width || frame.Height != m.config.Height) {
+		return fmt.Errorf("frame dimensions do not match the negotiated USB video format")
+	}
+
+	if frame.Flags == 4 {
+		// JPEG encoding can finish after subsequent H.264 frames arrive. Accept a
+		// recent sample even when no target app has opened the USB camera.
+		if m.config.Codec != "h264" || transport != "rtc-datachannel" || !m.haveSequence ||
+			time.Since(m.receivedAt) > 4*time.Second || m.lastSequence-frame.Sequence > 60 ||
+			(m.havePreviewSequence && int32(frame.Sequence-m.previewSequence) <= 0) {
+			return nil
+		}
+		if !time.Now().Before(m.previewUntil) {
+			return nil
+		}
+		// Preview sidecar is separate from the H.264 USB payload, never re-encoded on the device.
+		if _, err := encodeVirtualVideoPreview(frame.Payload); err != nil {
+			return err
+		}
+		m.latestFrame = append(m.latestFrame[:0], frame.Payload...)
+		m.previewAt = time.Now()
+		m.previewSequence = frame.Sequence
+		m.havePreviewSequence = true
+		return nil
+	}
 	if (frame.Flags&1 != 0) != (m.config.Codec == "h264") {
 		return fmt.Errorf("camera frame codec differs from the USB profile")
 	}
@@ -374,6 +399,20 @@ func (m *VirtualVideoManager) handleFrameDataLocked(data []byte, transport strin
 	}
 	var n int
 	if m.config.Codec == "h264" {
+		if transport != "rtc-datachannel" {
+			return fmt.Errorf("H.264 requires ordered WebRTC transport")
+		}
+		keyframe := frame.Flags&2 != 0
+		if err := uvc.ValidateH264(frame.Payload, keyframe); err != nil {
+			return err
+		}
+		if m.haveSequence && frame.Sequence != m.lastSequence+1 && !keyframe {
+			m.device.Reset()
+		}
+		m.lastSequence = frame.Sequence
+		m.haveSequence = true
+		m.receivedAt = time.Now()
+		n, err = m.device.WriteH264(frame.Payload, keyframe)
 	} else {
 		// A frame of another size than the host negotiated is dropped: the
 		// browser reads the new size from the state and follows.

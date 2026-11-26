@@ -73,3 +73,30 @@ func TestUVCFunctionRecreatedDespiteMatchingLinkOrder(t *testing.T) {
 		t.Fatalf("UVC link not restored: %q %v", target, err)
 	}
 }
+
+func TestCameraCodecProfiles(t *testing.T) {
+	for _, codec := range []string{"mjpeg", "h264"} {
+		u := &UsbGadget{configMap: deepCopyConfigMap(defaultGadgetConfig), customConfig: Config{VideoCodec: codec}, enabledDevices: Devices{Video: true, Network: true, Keyboard: true, Audio: true}, kvmGadgetPath: "/nonexistent/jetkvm", configC1Path: "/nonexistent/jetkvm/configs/c.1", log: defaultLogger}
+		if u.isGadgetConfigItemEnabled("video_base") != (codec == "mjpeg") || u.isGadgetConfigItemEnabled("video_h264_base") != (codec == "h264") {
+			t.Fatal("both camera profiles enabled")
+		}
+		if err := u.newUsbGadgetTransaction(false); err != nil {
+			t.Fatal(err)
+		}
+		u.tx.WriteGadgetConfig()
+		if u.tx.reorderSymlinkChanges != nil {
+			u.tx.addFileChange("gadget-finalize", *u.tx.reorderSymlinkChanges)
+		}
+		resolver := ChangeSetResolver{changeset: u.tx.c, g: &dag.AcyclicGraph{}, l: defaultLogger}
+		if _, err := resolver.GetChanges(); err != nil {
+			t.Fatal(codec, err)
+		}
+	}
+	h264 := defaultGadgetConfig["video_h264_format"]
+	if string(h264.attrs["guidFormat"][:4]) != "H264" || h264.path[3] != "framebased" {
+		t.Fatal("invalid H264 descriptor")
+	}
+	if _, present := defaultGadgetConfig["video_h264_480"].attrs["dwMaxVideoFrameBufferSize"]; present {
+		t.Fatal("MJPEG attribute on framebased descriptor")
+	}
+}

@@ -108,15 +108,33 @@ static int queue(struct uvc_output *d, struct v4l2_buffer *b) {
     pthread_mutex_lock(&d->lock);
     size_t size = d->frame_size;
     const uint8_t *data = d->frame;
+    struct encoded_frame *pending = NULL;
+    if (d->h264) {
+        if (!d->pending_count) { pthread_mutex_unlock(&d->lock); return 1; }
+        pending=&d->pending[d->pending_head]; size=pending->size; data=pending->data;
+    }
     if (size > d->buffers[b->index].size) { pthread_mutex_unlock(&d->lock); errno=EMSGSIZE; return -1; }
     if (size) memcpy(d->buffers[b->index].data, data, size);
     b->bytesused=size;
     int result=ioctl(d->fd,VIDIOC_QBUF,b);
     if (result==0) {
         d->queued[b->index]=1;
+        if (pending) {
+            free(pending->data); *pending=(struct encoded_frame){0};
+            d->pending_head=(d->pending_head+1)%FRAME_QUEUE_COUNT; d->pending_count--;
+        }
     }
     pthread_mutex_unlock(&d->lock);
     return result;
+}
+
+static void fill_h264_buffers(struct uvc_output *d) {
+    if (!d->h264 || !d->streaming) return;
+    for (unsigned i=0; i<d->buffer_count; i++) {
+        if (d->queued[i]) continue;
+        struct v4l2_buffer b={.type=V4L2_BUF_TYPE_VIDEO_OUTPUT,.memory=V4L2_MEMORY_MMAP,.index=i};
+        if (queue(d,&b)<0) { int error=errno ? errno : EIO; stream_off(d); pthread_mutex_lock(&d->lock); d->error=error; pthread_mutex_unlock(&d->lock); break; }
+    }
 }
 
 static int stream_on(struct uvc_output *d) {
@@ -234,6 +252,7 @@ static void *worker(void *arg) {
     for (;;) {
         pthread_mutex_lock(&d->lock); int stopped=d->stopped; pthread_mutex_unlock(&d->lock);
         if (stopped) break;
+        fill_h264_buffers(d);
         uint64_t now=monotonic_ns();
         int queued=0; for(unsigned i=0;i<d->buffer_count;i++) queued+=d->queued[i];
         int ready=d->streaming && (d->h264 ? queued>0 : now>=d->next_frame);
@@ -300,6 +319,20 @@ int uvc_output_frame(struct uvc_output *d, const void *data, size_t size, int ke
     if (!d->h264) {
         memcpy(d->frame,data,size); d->frame_size=size;
     } else {
+        // A predictive frame may only follow a complete, ordered GOP. While
+        // the host is closed, retain nothing; request a fresh IDR on opening.
+        if (d->pending_count==FRAME_QUEUE_COUNT) {
+            d->dropped+=d->pending_count; clear_pending(d);
+        }
+        if (!d->streaming || (d->needs_keyframe && !keyframe)) {
+            d->dropped++; pthread_mutex_unlock(&d->lock); return 1;
+        }
+        uint8_t *copy=malloc(size);
+        if (!copy) { d->dropped+=d->pending_count+1; clear_pending(d); pthread_mutex_unlock(&d->lock); return 1; }
+        memcpy(copy,data,size);
+        unsigned tail=(d->pending_head+d->pending_count)%FRAME_QUEUE_COUNT;
+        d->pending[tail]=(struct encoded_frame){copy,size}; d->pending_count++;
+        if (keyframe) d->needs_keyframe=0;
     }
     pthread_mutex_unlock(&d->lock); return 0;
 }
