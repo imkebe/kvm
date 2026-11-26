@@ -248,6 +248,8 @@ func homeStatus() string {
 	listening := audioTrack != nil
 	audioMu.Unlock()
 	chip("AUD", homeEnabled(devices.Audio, configured && listening, failed, ""))
+	mic := rpcGetVirtualAudioState()
+	chip("MIC", homeEnabled(devices.Microphone, configured && mic.Streaming, failed, mic.LastError))
 
 	camera := homeCameraState()
 	chip("CAM", homeEnabled(devices.Video, configured && camera.USBStreaming, failed, camera.LastError))
@@ -477,6 +479,14 @@ func homeCards() string {
 			out = "playing in the browser"
 		}
 		audio = append(audio, "Speaker: "+out)
+	}
+	if devices.Microphone {
+		mic := rpcGetVirtualAudioState()
+		in := "idle"
+		if mic.Streaming {
+			in = fmt.Sprintf("on  %d dropped", mic.FramesDropped)
+		}
+		audio = append(audio, "Microphone: "+in)
 	}
 	if len(audio) > 0 {
 		add(homePage("Audio", audio...))

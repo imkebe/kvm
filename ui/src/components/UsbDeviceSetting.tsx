@@ -29,6 +29,7 @@ export interface UsbDeviceConfig {
   serial_console: boolean;
   video: boolean;
   audio: boolean;
+  microphone: boolean;
 }
 
 type FeatureKey = keyof UsbDeviceConfig;
@@ -45,6 +46,7 @@ const none: UsbDeviceConfig = {
   serial_console: false,
   video: false,
   audio: false,
+  microphone: false,
 };
 const hid = { keyboard: true, absolute_mouse: true, relative_mouse: true };
 const defaultUsbDeviceConfig: UsbDeviceConfig = {
@@ -87,10 +89,22 @@ const usbPresets: UsbPreset[] = [
     config: { ...none, ...hid, mass_storage: true },
   },
   {
+    label: m.usb_preset_media_input(),
+    value: "media_input",
+    description: m.usb_preset_media_input_description(),
+    config: { ...none, ...hid, video: true, microphone: true },
+  },
+  {
     label: m.usb_preset_media_output(),
     value: "media_output",
     description: m.usb_preset_media_output_description(),
     config: { ...none, ...hid, audio: true },
+  },
+  {
+    label: m.usb_preset_media(),
+    value: "media",
+    description: m.usb_preset_media_description(),
+    config: { ...none, ...hid, video: true, microphone: true, audio: true },
   },
   { label: m.usb_device_custom(), value: "custom" },
 ];
@@ -111,6 +125,8 @@ function endpointLabel(name: string) {
       return m.usb_endpoint_relative_mouse();
     case "wake":
       return m.usb_endpoint_wake();
+    case "microphone":
+      return m.usb_endpoint_microphone();
     case "mass_storage":
       return m.usb_endpoint_mass_storage();
     case "serial_console":
@@ -136,6 +152,7 @@ const featureGroup: Record<FeatureKey, string | null> = {
   serial_console: "serial_console",
   video: "video",
   audio: null,
+  microphone: "microphone",
 };
 
 type Cell = { group: string; kind: "used" | "added" };
@@ -362,6 +379,11 @@ export function UsbDeviceSetting() {
           key: "audio",
           title: m.usb_device_enable_audio_title(),
           description: m.usb_device_enable_audio_description(),
+        },
+        {
+          key: "microphone",
+          title: m.usb_device_enable_microphone_title(),
+          description: m.usb_device_enable_microphone_description(),
         },
         {
           key: "video",

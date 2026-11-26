@@ -150,7 +150,7 @@ func (u *UsbGadget) isBaseGadgetConfigItemEnabled(itemKey string) bool {
 		"video_links":
 		return u.enabledDevices.Video && u.customConfig.VideoCodec != "h264"
 	case "audio":
-		return u.enabledDevices.Audio
+		return u.enabledDevices.Audio || u.enabledDevices.Microphone
 	default:
 		if f := registeredExternalFunction(); f != nil && itemKey == f.Key {
 			return u.externalReady
@@ -206,6 +206,7 @@ func (u *UsbGadget) syncVideoAttrs() {
 }
 
 func (u *UsbGadget) loadGadgetConfig() {
+	u.syncAudioAttrs()
 	u.syncVideoAttrs()
 	if u.customConfig.isEmpty {
 		u.log.Trace().Msg("using default gadget config")

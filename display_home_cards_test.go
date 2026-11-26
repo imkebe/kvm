@@ -3,6 +3,8 @@ package kvm
 import (
 	"strings"
 	"testing"
+
+	"github.com/jetkvm/kvm/internal/audio"
 	"github.com/jetkvm/kvm/internal/native"
 	"github.com/jetkvm/kvm/internal/usbgadget"
 )
@@ -48,15 +50,18 @@ func homeTestScreen(t *testing.T) *homeNative {
 	t.Helper()
 	savedConfig, savedNative, savedBacklight := config, nativeInstance, backlightState
 	savedSent := homeScreenSent
+	savedAudio := virtualAudio
 	savedPage, savedPageResend := homeCardChosen, homeCardResend
 	t.Cleanup(func() {
 		config, nativeInstance, backlightState = savedConfig, savedNative, savedBacklight
 		homeScreenSent = savedSent
+		virtualAudio = savedAudio
 		homeCardChosen, homeCardResend = savedPage, savedPageResend
 	})
 	screen := &homeNative{set: map[string]int{}}
 	config = &Config{UsbDevices: &usbgadget.Devices{}}
 	nativeInstance = screen
+	virtualAudio = audio.NewMicrophone(func() bool { return false }, nil)
 	homeScreenSent = [3]string{}
 	homeCardChosen, homeCardResend = "", false
 	return screen

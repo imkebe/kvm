@@ -945,6 +945,7 @@ export type Capability =
   | "extensions"
   | "usb_serial"
   | "usb_virtual_devices" // USB camera and Ethernet controls with live telemetry
+  | "usb_virtual_microphone" // browser microphone presented to the target as a USB microphone
   | "custom_edid"
   | "upload_channel"
   | "video_during_update" // video keeps streaming while an update installs

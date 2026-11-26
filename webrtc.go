@@ -666,6 +666,24 @@ func newSession(config SessionConfig) (*Session, error) {
 			handleSerialChannel(d)
 		case "cdcacm":
 			handleCDCACMChannel(d)
+		case "microphone":
+			if virtualAudio == nil {
+				d.Close()
+				return
+			}
+			microphoneChannelID := virtualAudio.BeginChannel()
+			d.OnClose(func() {
+				virtualAudio.StopChannel(microphoneChannelID)
+			})
+			d.OnMessage(func(msg webrtc.DataChannelMessage) {
+				if msg.IsString {
+					scopedLogger.Warn().Msg("received string data on microphone channel")
+					return
+				}
+				if err := virtualAudio.HandleChannelFrameData(microphoneChannelID, msg.Data); err != nil {
+					scopedLogger.Warn().Err(err).Msg("failed to handle microphone audio")
+				}
+			})
 		case "camera-mjpeg",
 			"camera-h264":
 			if d.Label() == "camera-h264" && (!d.Ordered() || d.MaxRetransmits() != nil || d.MaxPacketLifeTime() != nil) {

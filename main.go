@@ -68,6 +68,7 @@ func Main() {
 	setProcTitle("initUsbGadget")
 	initUsbGadget()
 	initVirtualVideo()
+	initVirtualAudio()
 
 	setProcTitle("initNative")
 	initNative(systemVersionLocal, appVersionLocal)
