@@ -157,9 +157,13 @@ export default function KvmIdRoute() {
     setRebootState,
     isEmbedMode,
     setEmbedMode,
+    isImmersiveMode,
+    setImmersiveMode,
   } = useUiStore();
   const [queryParams, setQueryParams] = useSearchParams();
-  const hasEmbedParam = queryParams.has("embed");
+  const hasImmersiveParam = queryParams.has("immersive");
+  // Immersive is embed mode without the ribbon either.
+  const hasEmbedParam = queryParams.has("embed") || hasImmersiveParam;
 
   // Latch embed mode once from ?embed query param — persists across in-app
   // navigation even if the query param is lost (e.g. opening settings)
@@ -167,7 +171,17 @@ export default function KvmIdRoute() {
     if (hasEmbedParam && !isEmbedMode) {
       setEmbedMode(true);
     }
-  }, [hasEmbedParam, isEmbedMode, setEmbedMode]);
+    if (hasImmersiveParam && !isImmersiveMode) {
+      setImmersiveMode(true);
+    }
+  }, [
+    hasEmbedParam,
+    isEmbedMode,
+    setEmbedMode,
+    hasImmersiveParam,
+    isImmersiveMode,
+    setImmersiveMode,
+  ]);
 
   const settingsHideHeaderBar = useSettingsStore(state => state.hideHeaderBar);
   const settingsHideStatusBar = useSettingsStore(state => state.hideStatusBar);

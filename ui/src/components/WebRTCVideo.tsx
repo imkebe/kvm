@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useResizeObserver } from "usehooks-ts";
 
 import { cx } from "@/cva.config";
@@ -36,6 +36,9 @@ import OcrOverlay from "@components/OcrOverlay";
 import { keys } from "@/keyboardMappings";
 import notifications from "@/notifications";
 import { m } from "@localizations/messages.js";
+
+// Only the ?immersive window uses it.
+const ImmersiveHud = lazy(() => import("@components/ImmersiveHud"));
 
 const initialHdmiErrorGraceMs = 2500;
 // The device owns the switch between HDMI capture and OS Services video
@@ -120,7 +123,7 @@ export default function WebRTCVideo({
   const devicePixelRatio = useDevicePixelRatio();
 
   // OCR mode
-  const { isOcrMode, setPendingPasteText } = useUiStore();
+  const { isOcrMode, setPendingPasteText, isImmersiveMode } = useUiStore();
   const { osServices, pasteViaGuest, copyFromGuest } = useGuestClipboard();
   // Files dragged from the desktop onto the video go to the remote host.
   useGuestFileDrop(videoElm);
@@ -352,10 +355,13 @@ export default function WebRTCVideo({
     await requestKeyboardLock();
     await requestPointerLock();
 
-    await fullscreenContainerRef.current.requestFullscreen({
+    // An immersive window is the stream alone, so it goes fullscreen as a
+    // whole: its HUD, the virtual keyboard and popovers stay visible.
+    const target = isImmersiveMode ? document.documentElement : fullscreenContainerRef.current;
+    await target.requestFullscreen({
       navigationUI: "show",
     });
-  }, [isFullscreenEnabled, requestKeyboardLock, requestPointerLock]);
+  }, [isFullscreenEnabled, requestKeyboardLock, requestPointerLock, isImmersiveMode]);
 
   // setup to release the keyboard lock anytime the fullscreen ends
   useEffect(() => {
@@ -894,21 +900,32 @@ export default function WebRTCVideo({
   ]);
 
   return (
-    <div className="grid h-full w-full grid-rows-(--grid-layout)">
-      <div className="flex min-h-[39.5px] flex-col">
-        <div className="flex flex-col">
-          <fieldset disabled={peerConnection?.connectionState !== "connected"} className="contents">
-            <Actionbar requestFullscreen={requestFullscreen} />
-            <MacroBar />
-          </fieldset>
+    <div
+      className={cx("grid h-full w-full", {
+        "grid-rows-(--grid-layout)": !isImmersiveMode,
+        "bg-black": isImmersiveMode,
+      })}
+    >
+      {!isImmersiveMode && (
+        <div className="flex min-h-[39.5px] flex-col">
+          <div className="flex flex-col">
+            <fieldset
+              disabled={peerConnection?.connectionState !== "connected"}
+              className="contents"
+            >
+              <Actionbar requestFullscreen={requestFullscreen} />
+              <MacroBar />
+            </fieldset>
+          </div>
         </div>
-      </div>
+      )}
 
       <div ref={containerRef} className="h-full overflow-hidden">
         <div className="relative h-full">
           <div
             className={cx(
               "absolute inset-0 z-0 bg-blue-50/40 opacity-80 dark:bg-slate-800/40",
+              isImmersiveMode && "hidden",
               "bg-[radial-gradient(var(--color-blue-300)_0.5px,transparent_0.5px),radial-gradient(var(--color-blue-300)_0.5px,transparent_0.5px)] dark:bg-[radial-gradient(var(--color-slate-700)_0.5px,transparent_0.5px),radial-gradient(var(--color-slate-700)_0.5px,transparent_0.5px)]",
               "bg-position-[0_0,10px_10px]",
               "bg-size-[20px_20px]",
@@ -920,7 +937,11 @@ export default function WebRTCVideo({
                 <div className="grid grow grid-rows-(--grid-bodyFooter) overflow-hidden">
                   {/* In relative mouse mode and under https, we enable the pointer lock, and to do so we need a bar to show the user to click on the video to enable mouse control */}
                   <PointerLockBar show={showPointerLockBar} />
-                  <div className="relative mx-4 my-2 flex items-center justify-center overflow-hidden">
+                  <div
+                    className={cx("relative flex items-center justify-center overflow-hidden", {
+                      "mx-4 my-2": !isImmersiveMode,
+                    })}
+                  >
                     <div
                       ref={fullscreenContainerRef}
                       className="relative flex h-full w-full items-center justify-center"
@@ -949,6 +970,11 @@ export default function WebRTCVideo({
                         })}
                       />
                       {audioEnabled && <audio ref={audioElm} autoPlay playsInline hidden />}
+                      {isImmersiveMode && (
+                        <Suspense fallback={null}>
+                          <ImmersiveHud requestFullscreen={requestFullscreen} />
+                        </Suspense>
+                      )}
                       <OcrOverlay />
                       {peerConnection?.connectionState == "connected" && !hasConnectionIssues && (
                         <div

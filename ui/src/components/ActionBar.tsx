@@ -6,6 +6,7 @@ import {
   LuExternalLink,
   LuHardDrive,
   LuMaximize,
+  LuMonitorPlay,
   LuScanText,
   LuSettings,
   LuSignal,
@@ -461,6 +462,31 @@ export default function Actionbar({
                         const url = new URL(window.location.href);
                         url.searchParams.set("embed", "");
                         window.open(url.toString(), "_blank", "noopener");
+                      },
+                    },
+                    {
+                      label: m.action_bar_immersive_window(),
+                      icon: LuMonitorPlay,
+                      onClick: () => {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("immersive", "");
+                        // A popup window has the least browser UI; sized to
+                        // the stream when it is known, else 16:9.
+                        const width = Math.min(
+                          window.screen.availWidth,
+                          videoWidth > 0 ? Math.max(640, videoWidth / 1.5) : 1280,
+                        );
+                        const ratio =
+                          videoWidth > 0 && videoHeight > 0 ? videoHeight / videoWidth : 9 / 16;
+                        const height = Math.min(
+                          window.screen.availHeight,
+                          Math.round(width * ratio),
+                        );
+                        window.open(
+                          url.toString(),
+                          "_blank",
+                          `popup,noopener,width=${Math.round(width)},height=${height}`,
+                        );
                       },
                     },
                   ]}
