@@ -105,7 +105,7 @@ func onRPCMessage(message webrtc.DataChannelMessage, session *Session) {
 	err := json.Unmarshal(message.Data, &request)
 	if err != nil {
 		jsonRpcLogger.Warn().
-			Str("data", string(message.Data)).
+			Int("length", len(message.Data)).
 			Err(err).
 			Msg("Error unmarshalling JSONRPC request")
 
@@ -1067,6 +1067,15 @@ func rpcGetUsbDevices() (usbgadget.Devices, error) {
 	return *config.UsbDevices, nil
 }
 
+// rpcGetUsbEndpointUsage returns the IN endpoints the devices would take,
+// split by function, with OS Services counted when it is on.
+func rpcGetUsbEndpointUsage(devices usbgadget.Devices) (usbgadget.INEndpointUsage, error) {
+	if gadget == nil {
+		return usbgadget.INEndpointUsage{}, errors.New("the USB gadget is not ready")
+	}
+	return gadget.INEndpointUsage(devices, osServicesUSBEnabled()), nil
+}
+
 func updateUsbRelatedConfig() error {
 	setUSBRecoveryTimer(time.Now())
 	if err := gadget.UpdateGadgetConfig(); err != nil {
@@ -1082,7 +1091,12 @@ func updateUsbRelatedConfig() error {
 }
 
 func rpcSetUsbDevices(usbDevices usbgadget.Devices) error {
+	if err := gadget.CheckINEndpoints(usbDevices, osServicesUSBEnabled()); err != nil {
+		return err
+	}
 	osServicesNoteKVMRestart()
+	previous := *config.UsbDevices
+	previousAudio := config.AudioEnabled
 	if !usbDevices.Audio {
 		config.AudioEnabled = false
 	}
@@ -1091,35 +1105,39 @@ func rpcSetUsbDevices(usbDevices usbgadget.Devices) error {
 		stopAudio()
 	}
 	gadget.SetGadgetDevices(effectiveUsbDevices())
-	return updateUsbRelatedConfig()
+	if err := updateUsbRelatedConfig(); err != nil {
+		config.UsbDevices = &previous
+		config.AudioEnabled = previousAudio
+		gadget.SetGadgetDevices(effectiveUsbDevices())
+		if restoreErr := updateUsbRelatedConfig(); restoreErr != nil {
+			return fmt.Errorf("%w; restoring previous USB configuration failed: %v", err, restoreErr)
+		}
+		return err
+	}
+	notifyUsbDevices()
+	return nil
 }
 
 func rpcSetUsbDeviceState(device string, enabled bool) error {
 	osServicesNoteKVMRestart()
+	devices := *config.UsbDevices
 	switch device {
 	case "absoluteMouse":
-		config.UsbDevices.AbsoluteMouse = enabled
+		devices.AbsoluteMouse = enabled
 	case "relativeMouse":
-		config.UsbDevices.RelativeMouse = enabled
+		devices.RelativeMouse = enabled
 	case "keyboard":
-		config.UsbDevices.Keyboard = enabled
+		devices.Keyboard = enabled
 	case "massStorage":
-		config.UsbDevices.MassStorage = enabled
+		devices.MassStorage = enabled
 	case "serialConsole":
-		config.UsbDevices.SerialConsole = enabled
+		devices.SerialConsole = enabled
 	case "audio":
-		config.UsbDevices.Audio = enabled
-		if !enabled {
-			config.AudioEnabled = false
-		}
+		devices.Audio = enabled
 	default:
 		return fmt.Errorf("invalid device: %s", device)
 	}
-	if !effectiveAudioEnabled() {
-		stopAudio()
-	}
-	gadget.SetGadgetDevices(effectiveUsbDevices())
-	return updateUsbRelatedConfig()
+	return rpcSetUsbDevices(devices)
 }
 
 func rpcSetCloudUrl(apiUrl string, appUrl string) error {
@@ -1626,6 +1644,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"setTerminalPaused":          {Func: rpcSetTerminalPaused, Params: []string{"terminalPaused"}},
 	"getUsbDevices":              {Func: rpcGetUsbDevices},
 	"setUsbDevices":              {Func: rpcSetUsbDevices, Params: []string{"devices"}},
+	"getUsbEndpointUsage":        {Func: rpcGetUsbEndpointUsage, Params: []string{"devices"}},
 	"setUsbDeviceState":          {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},
 	"setCloudUrl":                {Func: rpcSetCloudUrl, Params: []string{"apiUrl", "appUrl"}},
 	"getKeyboardLayout":          {Func: rpcGetKeyboardLayout},

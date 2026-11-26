@@ -8,12 +8,11 @@ import { SettingsItem } from "@components/SettingsItem";
 import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { SettingsSectionHeader } from "@components/SettingsSectionHeader";
 import { NestedSettingsGroup } from "@components/NestedSettingsGroup";
-import { UsbDeviceSetting } from "@components/UsbDeviceSetting";
-import { UsbInfoSetting } from "@components/UsbInfoSetting";
+import OsServicesDisplaySummary from "@components/OsServicesDisplaySummary";
 import notifications from "@/notifications";
 import { m } from "@localizations/messages.js";
 
-export default function SettingsHardwareRoute() {
+export default function SettingsDisplayRoute() {
   const { send } = useJsonRpc();
   const settings = useSettingsStore();
   const { setDisplayRotation } = useSettingsStore();
@@ -126,7 +125,7 @@ export default function SettingsHardwareRoute() {
 
   return (
     <div className="space-y-4">
-      <SettingsPageHeader title={m.hardware_title()} description={m.hardware_page_description()} />
+      <SettingsPageHeader title={m.display_title()} description={m.display_page_description()} />
       <div className="space-y-4">
         <SettingsItem
           title={m.hardware_display_orientation_title()}
@@ -232,9 +231,7 @@ export default function SettingsHardwareRoute() {
         </SettingsItem>
       </div>
 
-      <UsbDeviceSetting />
-
-      <UsbInfoSetting />
+      <OsServicesDisplaySummary />
     </div>
   );
 }

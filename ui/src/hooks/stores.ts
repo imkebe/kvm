@@ -1301,3 +1301,27 @@ export const useFailsafeModeStore = create<FailsafeModeState>(set => ({
   reason: "",
   setFailsafeMode: (active, reason) => set({ isFailsafeMode: active, reason }),
 }));
+
+// The USB functions the KVM presents (getUsbDevices), kept current by the
+// KVM's "usbDevices" event. null until the first answer.
+export interface UsbFunctions {
+  keyboard: boolean;
+  absolute_mouse: boolean;
+  relative_mouse: boolean;
+  mass_storage: boolean;
+  serial_console: boolean;
+  video: boolean;
+  network: boolean;
+  audio: boolean;
+  microphone: boolean;
+}
+
+interface UsbFunctionsState {
+  usbFunctions: UsbFunctions | null;
+  setUsbFunctions: (functions: UsbFunctions | null) => void;
+}
+
+export const useUsbFunctionsStore = create<UsbFunctionsState>(set => ({
+  usbFunctions: null,
+  setUsbFunctions: usbFunctions => set({ usbFunctions }),
+}));

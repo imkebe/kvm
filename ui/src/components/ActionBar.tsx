@@ -25,6 +25,7 @@ import {
   useCapability,
   useSettingsStore,
   useUiStore,
+  useUsbFunctionsStore,
   useVideoStore,
 } from "@hooks/stores";
 import { useDeviceUiNavigation } from "@hooks/useAppNavigation";
@@ -67,6 +68,9 @@ export default function Actionbar({
     if (button && !button.hasAttribute("data-open")) button.click();
   }, [pendingPasteText]);
   const { remoteVirtualMediaState } = useMountMediaStore();
+  // Virtual media needs the mass storage function; without it the button
+  // looks unavailable but still opens.
+  const massStorageOff = useUsbFunctionsStore(state => state.usbFunctions?.mass_storage === false);
   const { width: videoWidth, height: videoHeight } = useVideoStore();
   const { developerMode } = useSettingsStore();
   const shell = useCapability("shell");
@@ -160,6 +164,8 @@ export default function Actionbar({
           ) : null}
           <Popover>
             <SplitButtonGroup>
+                >
+                </button>
               <PopoverButton
                 as={SplitButtonPrimary}
                 ref={pasteButtonRef}
@@ -197,7 +203,10 @@ export default function Actionbar({
               }}
             </PopoverPanel>
           </Popover>
-          <div className="relative">
+          <div
+            className={cx("relative", { "opacity-50": massStorageOff })}
+            title={massStorageOff ? m.action_bar_virtual_media_off() : undefined}
+          >
             <Popover>
               <PopoverButton as={Fragment}>
                 <Button

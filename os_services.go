@@ -106,7 +106,7 @@ func initOSServices() {
 	usbgadget.RegisterExternalFunction(usbgadget.ExternalFunction{
 		Key:             osServicesUSBKey,
 		Instance:        osServicesFFSInstance,
-		Order:           5000,
+		Order:           9000, // links last, after the camera (5000) and the network (6000)
 		Prepare:         s.prepareFunction,
 		Release:         s.releaseFunction,
 		MSOSDescriptors: true,
@@ -461,6 +461,11 @@ func rpcSetOsServicesSettings(settings map[string]any) (OSServicesConfig, error)
 	merged, err := mergeOSServicesConfig(current, settings)
 	if err != nil {
 		return current, err
+	}
+	if merged.Enabled && !current.Enabled && config.UsbDevices != nil {
+		if err := gadget.CheckINEndpoints(*config.UsbDevices, true); err != nil {
+			return current, err
+		}
 	}
 	if merged == current {
 		return current, nil

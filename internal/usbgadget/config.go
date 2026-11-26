@@ -13,8 +13,10 @@ type gadgetConfigItem struct {
 	configAttrs gadgetAttributes
 	configPath  []string
 	reportDesc  []byte
-	// inEndpoints is the number of IN endpoints the function takes from
-	// the USB controller, besides the control endpoint.
+	// inEndpoints is upstream's count of the IN endpoints the function
+	// takes. This build counts them with inEndpointsByKey instead, which
+	// also knows which of them carry data (see inendpoints.go); a test
+	// keeps the two in step.
 	inEndpoints int
 }
 
@@ -70,7 +72,22 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 	"serial_console": serialConsoleConfig,
 }
 
+func init() {
+	for key, item := range spareINConfigs() {
+		defaultGadgetConfig[key] = item
+	}
+}
+
 func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
+	if _, _, isSpare := parseSpareKey(itemKey); isSpare {
+		return u.isSpareItemEnabled(itemKey)
+	}
+	return u.isBaseGadgetConfigItemEnabled(itemKey)
+}
+
+// isBaseGadgetConfigItemEnabled is the enabled state of an item that does
+// not depend on the endpoint plan.
+func (u *UsbGadget) isBaseGadgetConfigItemEnabled(itemKey string) bool {
 	switch itemKey {
 	case "absolute_mouse":
 		return u.enabledDevices.AbsoluteMouse
@@ -94,19 +111,6 @@ func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
 	}
 }
 
-// inEndpointsBefore is the number of IN endpoints of the enabled functions
-// that come before order. The controller numbers the IN endpoints from 1 in
-// the order of the functions, so the next function's first IN endpoint is
-// this number plus 1.
-func (u *UsbGadget) inEndpointsBefore(order uint) int {
-	count := 0
-	for key, item := range u.configMap {
-		if item.order < order && u.isGadgetConfigItemEnabled(key) {
-			count += item.inEndpoints
-		}
-	}
-	return count
-}
 
 func (u *UsbGadget) loadGadgetConfig() {
 	if u.customConfig.isEmpty {

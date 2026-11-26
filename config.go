@@ -215,6 +215,7 @@ var (
 		RelativeMouse: true,
 		Keyboard:      true,
 		MassStorage:   true,
+		SerialConsole: false,
 		Audio:         true,
 	}
 )

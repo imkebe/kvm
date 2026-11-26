@@ -32,6 +32,8 @@ import {
   useMountMediaStore,
   useRTCStore,
   useCapability,
+  useUsbFunctionsStore,
+  type UsbFunctions,
 } from "../hooks/stores";
 
 export default function MountRoute() {
@@ -241,6 +243,27 @@ function ModeSelectionView({
   setSelectedMode: (mode: "url" | "device") => void;
 }) {
   const { setModalView } = useMountMediaStore();
+  const { send } = useJsonRpc();
+  // Nothing can be mounted while the mass storage function is off: its LUN
+  // does not exist. The KVM pushes the new functions after a change.
+  const massStorageOff = useUsbFunctionsStore(state => state.usbFunctions?.mass_storage === false);
+  const [enabling, setEnabling] = useState(false);
+
+  function enableMassStorage() {
+    setEnabling(true);
+    send("setUsbDeviceState", { device: "massStorage", enabled: true }, resp => {
+      setEnabling(false);
+      if ("error" in resp) {
+        notifications.error(String(resp.error.data || resp.error.message));
+        return;
+      }
+      send("getUsbDevices", {}, devices => {
+        if (!("error" in devices)) {
+          useUsbFunctionsStore.getState().setUsbFunctions(devices.result as UsbFunctions);
+        }
+      });
+    });
+  }
 
   return (
     <div className="w-full space-y-4">
@@ -252,6 +275,20 @@ function ModeSelectionView({
           {m.mount_virtual_media_source_description()}
         </div>
       </div>
+      {massStorageOff && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+          <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+          <span className="flex-1">{m.mount_mass_storage_off()}</span>
+          <Button
+            size="XS"
+            theme="light"
+            loading={enabling}
+            disabled={enabling}
+            text={m.mount_mass_storage_turn_on()}
+            onClick={enableMassStorage}
+          />
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-3">
         {[
           {
@@ -331,6 +368,7 @@ function ModeSelectionView({
           <Button
             size="MD"
             theme="primary"
+            disabled={massStorageOff}
             onClick={() => {
               setModalView(selectedMode);
             }}

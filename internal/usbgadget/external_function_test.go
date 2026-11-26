@@ -7,7 +7,7 @@ import "testing"
 const controllerINEndpoints = 9
 
 func externalTestGadget(devices Devices) (*UsbGadget, *ExternalFunction) {
-	f := &ExternalFunction{Key: "external", Instance: "external", Order: 5000}
+	f := &ExternalFunction{Key: "external", Instance: "external", Order: 9000}
 	configMap := map[string]gadgetConfigItem{f.Key: f.configItem()}
 	for key, item := range defaultGadgetConfig {
 		configMap[key] = item

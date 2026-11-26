@@ -39,6 +39,8 @@ import {
   useSettingsStore,
   useCapability,
   useDeviceStore,
+  useUsbFunctionsStore,
+  type UsbFunctions,
 } from "@hooks/stores";
 import {
   holdRpcEvents,
@@ -525,6 +527,10 @@ export default function KvmIdRoute() {
     if (resp.method === "deviceCapabilities") {
       setCapabilities(resp.params as unknown as string[]);
     }
+
+    if (resp.method === "usbDevices") {
+      useUsbFunctionsStore.getState().setUsbFunctions(resp.params as unknown as UsbFunctions);
+    }
   }
 
   const { send } = useJsonRpc(onJsonRpcRequest, { receiveHeldEvents: true });
@@ -534,6 +540,19 @@ export default function KvmIdRoute() {
     // stay hidden until this channel's deviceCapabilities event arrives.
     if (rpcDataChannel?.readyState !== "open") setCapabilities(null);
   }, [rpcDataChannel?.readyState, setCapabilities]);
+
+  // The USB functions decide which controls look available.
+  useEffect(() => {
+    if (rpcDataChannel?.readyState !== "open") {
+      useUsbFunctionsStore.getState().setUsbFunctions(null);
+      return;
+    }
+    send("getUsbDevices", {}, (resp: JsonRpcResponse) => {
+      if (!("error" in resp)) {
+        useUsbFunctionsStore.getState().setUsbFunctions(resp.result as UsbFunctions);
+      }
+    });
+  }, [rpcDataChannel?.readyState, send]);
 
   // Mouse movement handler for E2E tests (needs send from useJsonRpc)
   const handleAbsMouseMove = useCallback(

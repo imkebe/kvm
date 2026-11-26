@@ -23,6 +23,9 @@ type Devices struct {
 	MassStorage   bool `json:"mass_storage"`
 	SerialConsole bool `json:"serial_console"`
 	Audio         bool `json:"audio"`
+	// Microphone turns on the KVM-to-host direction of the audio function,
+	// so the host sees a USB microphone.
+	Microphone bool `json:"microphone"`
 }
 
 // Config is a struct that represents the customizations for a USB gadget.
@@ -61,6 +64,10 @@ type UsbGadget struct {
 
 	configMap    map[string]gadgetConfigItem
 	customConfig Config
+
+	// spareINOverride replaces the check for spare IN endpoint support, for
+	// tests.
+	spareINOverride *bool
 
 	configLock sync.Mutex
 
