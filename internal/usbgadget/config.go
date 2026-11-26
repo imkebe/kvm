@@ -208,6 +208,7 @@ func (u *UsbGadget) syncVideoAttrs() {
 func (u *UsbGadget) loadGadgetConfig() {
 	u.syncAudioAttrs()
 	u.syncVideoAttrs()
+	u.syncFunctionNames()
 	if u.customConfig.isEmpty {
 		u.log.Trace().Msg("using default gadget config")
 		return

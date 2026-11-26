@@ -47,6 +47,10 @@ type Config struct {
 	// VideoFPS is the one frame rate the USB camera offers, one of
 	// VideoFrameRates. 0: it offers all and the host picks.
 	VideoFPS int `json:"video_fps,omitempty"`
+	// Names are the names of single functions (camera, audio, storage);
+	// nil keeps the defaults.
+	Names *FunctionNames `json:"function_names,omitempty"`
+
 	strictMode bool // when it's enabled, all warnings will be converted to errors
 	isEmpty    bool
 }

@@ -831,6 +831,11 @@ func rpcSetUsbConfig(usbConfig usbgadget.Config) error {
 		usbConfig.VideoSize, usbConfig.VideoFPS = virtualVideo.config.USBSize, virtualVideo.config.USBFPS
 		virtualVideo.mu.Unlock()
 	}
+	// The function names are set with setUsbFunctionNames; the identity
+	// form does not send them.
+	if config.UsbConfig != nil {
+		usbConfig.Names = config.UsbConfig.Names
+	}
 	config.UsbConfig = &usbConfig
 	gadget.SetGadgetConfig(config.UsbConfig)
 	return updateUsbRelatedConfig()
@@ -1680,6 +1685,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"getUsbDevices":              {Func: rpcGetUsbDevices},
 	"setUsbDevices":              {Func: rpcSetUsbDevices, Params: []string{"devices"}},
 	"getUsbEndpointUsage":        {Func: rpcGetUsbEndpointUsage, Params: []string{"devices"}},
+	"getUsbFunctionNames":        {Func: rpcGetUsbFunctionNames},
+	"setUsbFunctionNames":        {Func: rpcSetUsbFunctionNames, Params: []string{"names"}},
 	"setUsbDeviceState":          {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},
 	"getVirtualVideoState":       {Func: rpcGetVirtualVideoState},
 	"getVirtualAudioState":       {Func: rpcGetVirtualAudioState},

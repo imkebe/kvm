@@ -217,3 +217,25 @@ func TestVideoFrameTable(t *testing.T) {
 		t.Fatal("size or rate validation")
 	}
 }
+
+func TestFunctionNames(t *testing.T) {
+	if (FunctionNames{}).inquiryString() != "JetKVM  Virtual Media" {
+		t.Fatalf("default inquiry %q", (FunctionNames{}).inquiryString())
+	}
+	if got := (FunctionNames{StorageVendor: "Generic", StorageModel: "Flash Disk"}).inquiryString(); got != "Generic Flash Disk" {
+		t.Fatalf("inquiry %q", got)
+	}
+	for _, bad := range []FunctionNames{{Camera: strings.Repeat("x", 32)}, {StorageVendor: "123456789"},
+		{StorageModel: strings.Repeat("y", 17)}, {Audio: "naïve"}} {
+		if bad.Validate() == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+	u := planGadget(Devices{Video: true, Audio: true, MassStorage: true}, true)
+	u.customConfig = Config{Names: &FunctionNames{Camera: "Desk Camera"}}
+	u.syncFunctionNames()
+	if u.configMap["video_base"].attrs["function_name"] != "Desk Camera" ||
+		u.configMap["audio"].attrs["function_name"] != DefaultAudioName {
+		t.Fatalf("names %v %v", u.configMap["video_base"].attrs, u.configMap["audio"].attrs)
+	}
+}
