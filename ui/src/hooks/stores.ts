@@ -133,6 +133,23 @@ export const useUiStore = create<UIState>(set => ({
   setEmbedMode: (enabled: boolean) => set({ isEmbedMode: enabled }),
 }));
 
+// Its own store: a jiggle event must not re-render what reads useUiStore() whole.
+interface JigglerState {
+  // The KVM's mouse jiggler is on (shown on the USB card).
+  jigglerEnabled: boolean;
+  setJigglerEnabled: (enabled: boolean) => void;
+  // When the KVM last moved the mouse (jigglerJiggled event), ms since epoch.
+  jigglerLastJiggle: number;
+  noteJiggle: () => void;
+}
+
+export const useJigglerStore = create<JigglerState>(set => ({
+  jigglerEnabled: false,
+  setJigglerEnabled: (enabled: boolean) => set({ jigglerEnabled: enabled }),
+  jigglerLastJiggle: 0,
+  noteJiggle: () => set({ jigglerLastJiggle: Date.now() }),
+}));
+
 export interface RTCState {
   peerConnection: RTCPeerConnection | null;
   setPeerConnection: (pc: RTCState["peerConnection"]) => void;

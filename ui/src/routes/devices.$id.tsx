@@ -30,6 +30,7 @@ import {
   useNetworkStateStore,
   User,
   useRTCStore,
+  useJigglerStore,
   useUiStore,
   useUpdateStore,
   useVideoStore,
@@ -432,6 +433,10 @@ export default function KvmIdRoute() {
       const usbState = resp.params as unknown as USBStates;
       console.debug("Setting USB state", usbState);
       setUsbState(usbState);
+    }
+
+    if (resp.method === "jigglerJiggled") {
+      useJigglerStore.getState().noteJiggle();
     }
 
     if (resp.method === "videoInputState") {

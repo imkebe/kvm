@@ -102,6 +102,60 @@ func (u *UsbGadget) HasAbsoluteMouse() bool {
 	return u.enabledDevices.AbsoluteMouse
 }
 
+func (u *UsbGadget) HasRelativeMouse() bool {
+	return u.enabledDevices.RelativeMouse
+}
+
+// absMouseMax is the largest absolute coordinate.
+const absMouseMax = 32767
+
+// AbsJiggleTargets gives the two points of an absolute-mouse jiggle: a step
+// of (dx, dy) away, inside the screen, and the point to return to. Without a
+// known position it uses the middle of the screen (not the corner at 0,0,
+// which can trigger hot corners) and stays there.
+func AbsJiggleTargets(x, y int, known bool, dx, dy int) (awayX, awayY, backX, backY int) {
+	if !known {
+		x, y = absMouseMax/2, absMouseMax/2
+	}
+	clamp := func(v int) int { return max(0, min(absMouseMax, v)) }
+	awayX, awayY = clamp(x+dx), clamp(y+dy)
+	// At an edge the step goes the other way, so the pointer still moves.
+	if awayX == x {
+		awayX = clamp(x - dx)
+	}
+	if awayY == y {
+		awayY = clamp(y - dy)
+	}
+	return awayX, awayY, x, y
+}
+
+// AbsMouseJiggle moves the absolute pointer a small step and back, keeping
+// the buttons as they are: the mouse jiggler's way when there is no relative
+// mouse.
+func (u *UsbGadget) AbsMouseJiggle(dx, dy int) error {
+	u.hidLifecycle.RLock()
+	defer u.hidLifecycle.RUnlock()
+
+	if !u.enabledDevices.AbsoluteMouse {
+		return nil
+	}
+
+	u.absMouseLock.Lock()
+	defer u.absMouseLock.Unlock()
+
+	awayX, awayY, backX, backY := AbsJiggleTargets(u.absMouseX, u.absMouseY, u.absMouseKnown, dx, dy)
+	buttons := u.absMouseButtons
+	if err := u.absMouseReportLocked(awayX, awayY, buttons); err != nil {
+		return err
+	}
+	time.Sleep(30 * time.Millisecond)
+	if err := u.absMouseReportLocked(backX, backY, buttons); err != nil {
+		return err
+	}
+	u.resetUserInputTime()
+	return nil
+}
+
 func (u *UsbGadget) AbsMouseReport(x int, y int, buttons uint8) error {
 	u.hidLifecycle.RLock()
 	defer u.hidLifecycle.RUnlock()
@@ -135,6 +189,7 @@ func (u *UsbGadget) absMouseReportLocked(x int, y int, buttons uint8) error {
 	}
 
 	u.absMouseButtons, u.absMouseX, u.absMouseY = buttons, x, y
+	u.absMouseKnown = true
 	if pressed := buttons != 0; pressed != u.absMousePressed {
 		u.absMousePressed = pressed
 		updateHidHandover(func(h *hidHandover) {

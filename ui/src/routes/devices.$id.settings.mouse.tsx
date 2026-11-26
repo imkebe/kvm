@@ -5,7 +5,7 @@ import { cx } from "@/cva.config";
 import MouseIcon from "@assets/mouse-icon.svg";
 import PointingFinger from "@assets/pointing-finger.svg";
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
-import { useSettingsStore } from "@hooks/stores";
+import { useJigglerStore, useSettingsStore } from "@hooks/stores";
 import { GridCard } from "@components/Card";
 import { Checkbox } from "@components/Checkbox";
 import { SelectMenuBasic } from "@components/SelectMenuBasic";
@@ -86,12 +86,13 @@ export default function SettingsMouseRoute() {
   ];
 
   const { send } = useJsonRpc();
+  const setJigglerEnabled = useJigglerStore(state => state.setJigglerEnabled);
 
   const syncJigglerSettings = useCallback(() => {
     send("getJigglerState", {}, (resp: JsonRpcResponse) => {
       if ("error" in resp) return;
       const isEnabled = resp.result as boolean;
-      console.log("Jiggler is enabled:", isEnabled);
+      setJigglerEnabled(isEnabled);
 
       // If the jiggler is disabled, set the selected option to "disabled" and nothing else
       if (!isEnabled) return setSelectedJigglerOption("disabled");
@@ -111,7 +112,7 @@ export default function SettingsMouseRoute() {
         setSelectedJigglerOption(value || "custom");
       });
     });
-  }, [send]);
+  }, [send, setJigglerEnabled]);
 
   useEffect(() => {
     syncJigglerSettings();
@@ -126,6 +127,7 @@ export default function SettingsMouseRoute() {
             m.mouse_jiggler_failed_state({ error: resp.error.data || m.unknown_error() }),
           );
         }
+        setJigglerEnabled(true);
       });
 
       send("setJigglerConfig", { jigglerConfig }, (resp: JsonRpcResponse) => {
@@ -148,7 +150,7 @@ export default function SettingsMouseRoute() {
         syncJigglerSettings();
       });
     },
-    [send, syncJigglerSettings],
+    [send, syncJigglerSettings, setJigglerEnabled],
   );
 
   const handleJigglerChange = (option: JigglerValues) => {
@@ -166,6 +168,7 @@ export default function SettingsMouseRoute() {
             m.mouse_jiggler_failed_state({ error: resp.error.data || m.unknown_error() }),
           );
         }
+        setJigglerEnabled(false);
       });
 
       notifications.success(m.mouse_jiggler_config_updated());
