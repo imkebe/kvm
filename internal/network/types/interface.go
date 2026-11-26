@@ -26,6 +26,9 @@ type InterfaceState struct {
 	DHCPLease4    *DHCPLease    `json:"dhcp_lease,omitempty"`
 	DHCPLease6    *DHCPLease    `json:"dhcp_lease6,omitempty"`
 	LastUpdated   time.Time     `json:"last_updated"`
+
+	// The static IPv4 fallback of DHCP mode is applied.
+	IPv4FallbackActive bool `json:"ipv4_fallback_active"`
 }
 
 // RpcInterfaceState is the RPC representation of an interface state

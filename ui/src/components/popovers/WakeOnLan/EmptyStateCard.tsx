@@ -1,5 +1,5 @@
 import { PlusCircleIcon } from "@heroicons/react/16/solid";
-import { LuPlus } from "react-icons/lu";
+import { LuPlus, LuRadar } from "react-icons/lu";
 
 import { m } from "@localizations/messages.js";
 import Card from "@components/Card";
@@ -8,9 +8,11 @@ import { Button } from "@components/Button";
 export default function EmptyStateCard({
   onCancelWakeOnLanModal,
   setShowAddForm,
+  onDiscover,
 }: {
   onCancelWakeOnLanModal: () => void;
   setShowAddForm: (show: boolean) => void;
+  onDiscover: () => void;
 }) {
   return (
     <div className="space-y-4 select-none">
@@ -43,6 +45,13 @@ export default function EmptyStateCard({
         }}
       >
         <Button size="SM" theme="blank" text={m.close()} onClick={onCancelWakeOnLanModal} />
+        <Button
+          size="SM"
+          theme="light"
+          text={m.wake_on_lan_discover()}
+          onClick={onDiscover}
+          LeadingIcon={LuRadar}
+        />
         <Button
           size="SM"
           theme="primary"

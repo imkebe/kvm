@@ -1055,6 +1055,8 @@ export interface NetworkState {
   ipv6_gateway?: string;
   dhcp_lease?: DhcpLease;
   hostname?: string;
+  // The static IPv4 fallback of DHCP mode is applied: DHCP gave no lease.
+  ipv4_fallback_active?: boolean;
 
   setNetworkState: (state: NetworkState) => void;
   setDhcpLease: (lease: NetworkState["dhcp_lease"]) => void;
@@ -1094,6 +1096,10 @@ export interface NetworkSettings {
   http_proxy: string | null;
   ipv4_mode: IPv4Mode;
   ipv4_static?: IPv4StaticConfig;
+  // DHCP mode: the static address used while DHCP gives no lease.
+  ipv4_fallback_enabled?: boolean;
+  ipv4_fallback_timeout?: number;
+  ipv4_fallback?: IPv4StaticConfig;
   ipv6_mode: IPv6Mode;
   ipv6_static?: IPv6StaticConfig;
   lldp_mode: LLDPMode;

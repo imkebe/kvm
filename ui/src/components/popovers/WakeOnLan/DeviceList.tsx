@@ -1,4 +1,4 @@
-import { LuPlus, LuSend, LuTrash2 } from "react-icons/lu";
+import { LuPlus, LuRadar, LuSend, LuTrash2 } from "react-icons/lu";
 import { useState } from "react";
 
 import { m } from "@localizations/messages.js";
@@ -19,6 +19,7 @@ interface DeviceListProps {
   onDeleteDevice: (index: number) => void;
   onCancelWakeOnLanModal: () => void;
   setShowAddForm: (show: boolean) => void;
+  onDiscover: () => void;
 }
 
 export default function DeviceList({
@@ -28,6 +29,7 @@ export default function DeviceList({
   onDeleteDevice,
   onCancelWakeOnLanModal,
   setShowAddForm,
+  onDiscover,
 }: DeviceListProps) {
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
 
@@ -108,6 +110,13 @@ export default function DeviceList({
         }}
       >
         <Button size="SM" theme="blank" text={m.close()} onClick={onCancelWakeOnLanModal} />
+        <Button
+          size="SM"
+          theme="light"
+          text={m.wake_on_lan_discover()}
+          onClick={onDiscover}
+          LeadingIcon={LuRadar}
+        />
         <Button
           size="SM"
           theme="primary"

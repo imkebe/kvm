@@ -39,6 +39,13 @@ type NetworkConfig struct {
 	IPv4Mode   null.String       `json:"ipv4_mode,omitempty" one_of:"dhcp,static,disabled" default:"dhcp"`
 	IPv4Static *IPv4StaticConfig `json:"ipv4_static,omitempty" required_if:"IPv4Mode=static"`
 
+	// In DHCP mode: when DHCP gives no lease within IPv4FallbackTimeout
+	// seconds, the interface gets IPv4Fallback. DHCP keeps trying, and a
+	// lease replaces the fallback.
+	IPv4FallbackEnabled null.Bool         `json:"ipv4_fallback_enabled,omitempty" default:"false"`
+	IPv4FallbackTimeout null.Int          `json:"ipv4_fallback_timeout,omitempty" default:"30"`
+	IPv4Fallback        *IPv4StaticConfig `json:"ipv4_fallback,omitempty"`
+
 	IPv6Mode   null.String       `json:"ipv6_mode,omitempty" one_of:"slaac,dhcpv6,slaac_and_dhcpv6,static,link_local,disabled" default:"slaac"`
 	IPv6Static *IPv6StaticConfig `json:"ipv6_static,omitempty" required_if:"IPv6Mode=static"`
 

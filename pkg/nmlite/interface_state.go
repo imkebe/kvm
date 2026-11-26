@@ -17,6 +17,8 @@ const (
 	IfStateOnlineStateChanged IfStateChangeReason = 2
 	IfStateMACAddressChanged  IfStateChangeReason = 3
 	IfStateIPAddressesChanged IfStateChangeReason = 4
+
+	IfStateIPv4FallbackChanged IfStateChangeReason = 5
 )
 
 type IfStateChangeReasons []IfStateChangeReason
@@ -31,6 +33,8 @@ func (r IfStateChangeReason) String() string {
 		return "MAC address changed"
 	case IfStateIPAddressesChanged:
 		return "IP addresses changed"
+	case IfStateIPv4FallbackChanged:
+		return "IPv4 fallback changed"
 	default:
 		return fmt.Sprintf("unknown change reason %d", r)
 	}
@@ -91,6 +95,12 @@ func (im *InterfaceManager) updateInterfaceState() error {
 	} else if ipChanged {
 		stateChanged = true
 		changeReasons = append(changeReasons, IfStateIPAddressesChanged)
+	}
+
+	if fallback := im.IPv4FallbackActive(); im.state.IPv4FallbackActive != fallback {
+		im.state.IPv4FallbackActive = fallback
+		stateChanged = true
+		changeReasons = append(changeReasons, IfStateIPv4FallbackChanged)
 	}
 
 	im.state.LastUpdated = time.Now()

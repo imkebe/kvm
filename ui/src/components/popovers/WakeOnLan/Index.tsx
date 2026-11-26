@@ -11,10 +11,18 @@ import notifications from "@/notifications";
 import EmptyStateCard from "./EmptyStateCard";
 import DeviceList, { StoredDevice } from "./DeviceList";
 import AddDeviceForm from "./AddDeviceForm";
+import DiscoverDevices from "./DiscoverDevices";
 
 export default function WakeOnLanModal() {
   const [storedDevices, setStoredDevices] = useState<StoredDevice[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showDiscover, setShowDiscover] = useState(false);
+  // The add form's values when a discovered device is picked.
+  const [prefill, setPrefill] = useState<{ name: string; macAddress: string } | null>(null);
+  const openAddForm = useCallback((show: boolean) => {
+    if (!show) setPrefill(null);
+    setShowAddForm(show);
+  }, []);
   const { setDisableVideoFocusTrap } = useUiStore();
   const { rpcDataChannel } = useRTCStore();
   const { send } = useJsonRpc();
@@ -105,6 +113,7 @@ export default function WakeOnLanModal() {
             setAddDeviceErrorMessage(m.wake_on_lan_failed_add_device());
           } else {
             setShowAddForm(false);
+            setPrefill(null);
             syncStoredDevices();
           }
         },
@@ -122,15 +131,29 @@ export default function WakeOnLanModal() {
 
             {showAddForm ? (
               <AddDeviceForm
-                setShowAddForm={setShowAddForm}
+                key={prefill?.macAddress ?? "manual"}
+                initialName={prefill?.name}
+                initialMacAddress={prefill?.macAddress}
+                setShowAddForm={openAddForm}
                 errorMessage={addDeviceErrorMessage}
                 setErrorMessage={setAddDeviceErrorMessage}
                 onAddDevice={onAddDevice}
               />
+            ) : showDiscover ? (
+              <DiscoverDevices
+                savedMacs={new Set(storedDevices.map(device => device.macAddress.toLowerCase()))}
+                onBack={() => setShowDiscover(false)}
+                onPick={(name, macAddress) => {
+                  setPrefill({ name, macAddress });
+                  setShowDiscover(false);
+                  setShowAddForm(true);
+                }}
+              />
             ) : storedDevices.length === 0 ? (
               <EmptyStateCard
                 onCancelWakeOnLanModal={onCancelWakeOnLanModal}
-                setShowAddForm={setShowAddForm}
+                setShowAddForm={openAddForm}
+                onDiscover={() => setShowDiscover(true)}
               />
             ) : (
               <DeviceList
@@ -139,7 +162,8 @@ export default function WakeOnLanModal() {
                 onSendMagicPacket={onSendMagicPacket}
                 onDeleteDevice={onDeleteDevice}
                 onCancelWakeOnLanModal={onCancelWakeOnLanModal}
-                setShowAddForm={setShowAddForm}
+                setShowAddForm={openAddForm}
+                onDiscover={() => setShowDiscover(true)}
               />
             )}
           </div>
