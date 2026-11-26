@@ -1715,6 +1715,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"getUsbDevices":              {Func: rpcGetUsbDevices},
 	"setUsbDevices":              {Func: rpcSetUsbDevices, Params: []string{"devices"}},
 	"getUsbEndpointUsage":        {Func: rpcGetUsbEndpointUsage, Params: []string{"devices"}},
+	"getOsServicesTerminalShell": {Func: rpcGetOsServicesTerminalShell},
 	"getUsbFunctionNames":        {Func: rpcGetUsbFunctionNames},
 	"setUsbFunctionNames":        {Func: rpcSetUsbFunctionNames, Params: []string{"names"}},
 	"setUsbDeviceState":          {Func: rpcSetUsbDeviceState, Params: []string{"device", "enabled"}},

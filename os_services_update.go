@@ -489,11 +489,17 @@ func (r *osServicesUpdates) releaseKeys(ctx context.Context) error {
 // fetchIndex fetches one index into its cached copy. Nothing changes on
 // failure.
 func (r *osServicesUpdates) fetchIndex(ctx context.Context, client *http.Client, which int) error {
-	url := osServicesBucketURL + "/" + osUpdateIndexNames[which]
+	repository := osServicesRepository()
+	url := osServicesRepositoryFile(repository, osUpdateIndexNames[which])
 	r.mu.Lock()
 	etag := r.etags[which]
 	r.mu.Unlock()
-	index, err := fetchOSUpdateFile(ctx, client, url, etag, release.IndexMax)
+	// The dev index is unsigned, so only JetKVM's is trusted: another
+	// repository's counts as missing.
+	index, err := osUpdateFile{status: http.StatusNotFound}, error(nil)
+	if which == osUpdateIndexStable || repository == osServicesBucketURL {
+		index, err = fetchOSUpdateFile(ctx, client, url, etag, release.IndexMax)
+	}
 	fresh := err == nil && index.status == http.StatusOK
 	if fresh && which == osUpdateIndexStable {
 		var sig osUpdateFile
@@ -602,7 +608,7 @@ func (r *osServicesUpdates) runUpdate(ctx context.Context) {
 func (r *osServicesUpdates) relayPackage(ctx context.Context, pkg release.Package, signed bool, version string, session uint32) error {
 	client := osServicesHTTPClient()
 	defer client.CloseIdleConnections()
-	url := osServicesBucketURL + "/" + pkg.Path
+	url := osServicesRepositoryFile(osServicesRepository(), pkg.Path)
 	var signature []byte
 	if signed {
 		sig, err := fetchOSUpdateFile(ctx, client, url+".sig", "", release.SignatureMax)

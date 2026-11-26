@@ -38,6 +38,7 @@ import Notifications from "@/notifications";
 import { isStaleChunkError, reloadForNewBuild } from "@/utils/staleBuild";
 const SignupRoute = lazy(() => import("@routes/signup"));
 const LoginRoute = lazy(() => import("@routes/login"));
+const OsServicesGuideRoute = lazy(() => import("@routes/os-services-guide"));
 const DevicesAlreadyAdopted = lazy(() => import("@routes/devices.already-adopted"));
 const OtherSessionRoute = lazy(() => import("@routes/devices.$id.other-session"));
 const MountRoute = lazy(() => import("@routes/devices.$id.mount"));
@@ -287,6 +288,7 @@ if (isOnDevice) {
           element: <WelcomeRoute />,
           loader: WelcomeRoute.loader,
         },
+        { path: "/os-services-guide", element: <OsServicesGuideRoute /> },
         {
           path: "/login-local",
           element: <LoginLocalRoute />,
@@ -315,6 +317,7 @@ if (isOnDevice) {
       children: [
         { path: "signup", element: <SignupRoute /> },
         { path: "login", element: <LoginRoute /> },
+        { path: "os-services-guide", element: <OsServicesGuideRoute /> },
         {
           path: "/",
           element: <Root />,

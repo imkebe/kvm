@@ -53,9 +53,15 @@ func Link(version string) string {
 	return InstallURL + "?kvm=" + url.QueryEscape(version)
 }
 
-// Page is "Install OS Services.html".
+// Page is "Install OS Services.html" for a firmware version.
 func Page(version string) []byte {
-	link := html.EscapeString(Link(version))
+	return PageTo(Link(version))
+}
+
+// PageTo is "Install OS Services.html" that opens link, a download page of
+// another OS Services repository.
+func PageTo(target string) []byte {
+	link := html.EscapeString(target)
 	return []byte("<!doctype html>\n" +
 		"<html lang=\"en\">\n" +
 		"<head>\n" +
@@ -71,7 +77,12 @@ func Page(version string) []byte {
 
 // Image is the whole disc for a firmware version.
 func Image(version string) []byte {
-	content := Page(version)
+	return ImageTo(Link(version))
+}
+
+// ImageTo is the whole disc with a page that opens link.
+func ImageTo(link string) []byte {
+	content := PageTo(link)
 	fileSectors := (len(content) + sector - 1) / sector
 	volumeSectors := fileSector + fileSectors + padSectors
 	data := make([]byte, volumeSectors*sector)
