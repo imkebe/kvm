@@ -210,6 +210,7 @@ func setupRouter() *gin.Engine {
 	{
 		protected.GET(localSignalingPath, handleLocalWebRTCSignal)
 		protected.GET("/webrtc/stats", handleWebRTCStats)
+		protected.GET(virtualVideoWebSocketPath, handleVirtualVideoWebSocket)
 		protected.POST("/cloud/register", handleCloudRegister)
 		protected.GET("/cloud/state", handleCloudState)
 		protected.GET("/device", handleDevice)

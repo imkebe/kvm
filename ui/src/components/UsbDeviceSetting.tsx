@@ -27,6 +27,7 @@ export interface UsbDeviceConfig {
   relative_mouse: boolean;
   mass_storage: boolean;
   serial_console: boolean;
+  video: boolean;
   audio: boolean;
 }
 
@@ -42,6 +43,7 @@ const none: UsbDeviceConfig = {
   relative_mouse: false,
   mass_storage: false,
   serial_console: false,
+  video: false,
   audio: false,
 };
 const hid = { keyboard: true, absolute_mouse: true, relative_mouse: true };
@@ -113,6 +115,8 @@ function endpointLabel(name: string) {
       return m.usb_endpoint_mass_storage();
     case "serial_console":
       return m.usb_endpoint_serial_console();
+    case "video":
+      return m.usb_endpoint_video();
     case "os_services":
       return m.usb_endpoint_os_services();
     case "spare":
@@ -130,6 +134,7 @@ const featureGroup: Record<FeatureKey, string | null> = {
   relative_mouse: "relative_mouse",
   mass_storage: "mass_storage",
   serial_console: "serial_console",
+  video: "video",
   audio: null,
 };
 
@@ -357,6 +362,11 @@ export function UsbDeviceSetting() {
           key: "audio",
           title: m.usb_device_enable_audio_title(),
           description: m.usb_device_enable_audio_description(),
+        },
+        {
+          key: "video",
+          title: m.usb_device_enable_video_title(),
+          description: m.usb_device_enable_video_description(),
         },
         ...(usbSerial
           ? [

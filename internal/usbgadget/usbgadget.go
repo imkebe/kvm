@@ -22,6 +22,8 @@ type Devices struct {
 	Keyboard      bool `json:"keyboard"`
 	MassStorage   bool `json:"mass_storage"`
 	SerialConsole bool `json:"serial_console"`
+	Video         bool `json:"video"`
+	Network       bool `json:"network"`
 	Audio         bool `json:"audio"`
 	// Microphone turns on the KVM-to-host direction of the audio function,
 	// so the host sees a USB microphone.
@@ -38,6 +40,13 @@ type Config struct {
 	Product       string `json:"product"`
 	Configuration string `json:"configuration"`
 
+	VideoCodec      string `json:"video_codec,omitempty"`
+	// VideoSize is the one MJPEG frame size the USB camera offers, a key of
+	// VideoFrameSizes ("360" … "1080"). Empty: it offers all and the host picks.
+	VideoSize string `json:"video_size,omitempty"`
+	// VideoFPS is the one frame rate the USB camera offers, one of
+	// VideoFrameRates. 0: it offers all and the host picks.
+	VideoFPS int `json:"video_fps,omitempty"`
 	strictMode bool // when it's enabled, all warnings will be converted to errors
 	isEmpty    bool
 }

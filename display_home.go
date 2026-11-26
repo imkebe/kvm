@@ -66,15 +66,18 @@ type homeRateSample struct {
 	at           time.Time
 	videoFrames  uint64
 	videoBytes   uint64
+	cameraFrames uint64
 	cpuBusy      uint64
 	cpuTotal     uint64
 	// The rates between the last two readings.
 	videoFPS  float64
 	videoKbps float64
+	cameraFPS float64
 	cpu       float64
 
 	videoKbpsHistory homeHistory
 	videoFPSHistory  homeHistory
+	cameraHistory    homeHistory
 	cpuHistory       homeHistory
 	memoryHistory    homeHistory
 	heatHistory      homeHistory
@@ -245,6 +248,9 @@ func homeStatus() string {
 	listening := audioTrack != nil
 	audioMu.Unlock()
 	chip("AUD", homeEnabled(devices.Audio, configured && listening, failed, ""))
+
+	camera := homeCameraState()
+	chip("CAM", homeEnabled(devices.Video, configured && camera.USBStreaming, failed, camera.LastError))
 	chip("SER", homeEnabled(devices.SerialConsole, configured, failed, ""))
 
 	_, connected := homeOSServices()
@@ -269,6 +275,13 @@ func homeUSBState() string {
 	return usbState
 }
 
+func homeCameraState() VirtualVideoState {
+	if virtualVideo == nil {
+		return VirtualVideoState{}
+	}
+	return virtualVideo.State()
+}
+
 func homeOSServices() (osservices.State, bool) {
 	if osServices == nil {
 		return osservices.State{}, false
@@ -286,6 +299,7 @@ func homeSampleRates() {
 		return
 	}
 	frames, bytes := videoFramesSent.Load(), videoBytesSent.Load()
+	camera := homeCameraState().FramesWritten
 	busy, total := homeCPUTimes()
 	if seconds >= 5 {
 		// Sampling was paused: the charts start again.
@@ -294,16 +308,22 @@ func homeSampleRates() {
 	if !sample.at.IsZero() && seconds < 10 {
 		sample.videoFPS = float64(frames-sample.videoFrames) / seconds
 		sample.videoKbps = float64(bytes-sample.videoBytes) * 8 / 1000 / seconds
+		sample.cameraFPS = 0
+		if camera >= sample.cameraFrames {
+			sample.cameraFPS = float64(camera-sample.cameraFrames) / seconds
+		}
 		if total > sample.cpuTotal {
 			sample.cpu = 100 * float64(busy-sample.cpuBusy) / float64(total-sample.cpuTotal)
 		}
 	}
 	sample.at = now
 	sample.videoFrames, sample.videoBytes = frames, bytes
+	sample.cameraFrames = camera
 	sample.cpuBusy, sample.cpuTotal = busy, total
 
 	sample.videoKbpsHistory.push(sample.videoKbps)
 	sample.videoFPSHistory.push(sample.videoFPS)
+	sample.cameraHistory.push(sample.cameraFPS)
 	sample.cpuHistory.push(sample.cpu)
 	if memTotal, available := homeMemory(); memTotal > 0 {
 		sample.memoryHistory.push(100 * float64(memTotal-available) / float64(memTotal))
@@ -428,6 +448,23 @@ func homeCards() string {
 			reason = "no signal"
 		}
 		add(homePage("Video", homeText(strings.ReplaceAll(reason, "_", " "), homeLineChars), viewers))
+	}
+
+	if camera := homeCameraState(); devices.Video || camera.Enabled {
+		reader := "target is not reading"
+		if camera.USBStreaming {
+			reader = "target is reading"
+		}
+		mode := "stopped"
+		if camera.Enabled {
+			mode = fmt.Sprintf("%s %dx%d at %d", strings.ToUpper(camera.Codec), camera.Width, camera.Height, camera.FramesPerSec)
+		}
+		frames := homeChart(0, 15, green, rates.cameraHistory)
+		add(homePage("Camera", mode, frames),
+			homePage("Camera frames", fmt.Sprintf("%.0f frames a second", rates.cameraFPS), frames),
+			homePage("Camera state", mode, reader,
+				fmt.Sprintf("%d frames", camera.FramesWritten),
+				fmt.Sprintf("%d dropped", camera.DroppedFrames)))
 	}
 
 	var audio []string

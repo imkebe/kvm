@@ -203,6 +203,12 @@ func (tx *UsbGadgetTransaction) WriteGadgetConfig() {
 		deps = tx.writeGadgetItemConfig(item, deps)
 	}
 
+	// UVC snapshots its class descriptors when the function is linked into
+	// the configuration. Its base item precedes the descriptor/header items,
+	// so wait for every item even when video is the last enabled function.
+	if tx.reorderSymlinkChanges != nil {
+		tx.reorderSymlinkChanges.DependsOn = append(tx.reorderSymlinkChanges.DependsOn, deps...)
+	}
 	tx.WriteUDC()
 }
 
@@ -240,7 +246,7 @@ func (tx *UsbGadgetTransaction) writeGadgetItemConfig(item gadgetConfigItem, dep
 	files = append(files, deps...)
 
 	gadgetItemPath := joinPath(tx.kvmGadgetPath, item.path)
-	if gadgetItemPath != tx.kvmGadgetPath {
+	if gadgetItemPath != tx.kvmGadgetPath && !item.linksOnly {
 		gadgetItemDir := tx.mkdirAll(component, gadgetItemPath, "create gadget item directory", files)
 		files = append(files, gadgetItemDir)
 	}
@@ -272,7 +278,7 @@ func (tx *UsbGadgetTransaction) writeGadgetItemConfig(item gadgetConfigItem, dep
 			BeforeChange:    beforeChange,
 			DependsOn:       files,
 		})
-	} else {
+	} else if !item.linksOnly {
 		tx.addFileChange(component, RequestedFileChange{
 			Path:          reportDescPath,
 			ExpectedState: FileStateAbsent,
@@ -281,7 +287,27 @@ func (tx *UsbGadgetTransaction) writeGadgetItemConfig(item gadgetConfigItem, dep
 			DependsOn:     files,
 		})
 	}
-	files = append(files, reportDescPath)
+	if !item.linksOnly {
+		files = append(files, reportDescPath)
+	}
+
+	if len(item.symlinks) > 0 {
+		for _, link := range item.symlinks {
+			linkPath := joinPath(gadgetItemPath, link.path)
+			targetPath := joinPath(gadgetItemPath, link.target)
+			// Parents are configfs default groups or earlier descriptor items.
+			// Staging them twice produces duplicate DAG vertices.
+			tx.addFileChange(component, RequestedFileChange{
+				Path:            linkPath,
+				ExpectedState:   FileStateSymlink,
+				ExpectedContent: []byte(targetPath),
+				Description:     "create gadget internal symlink",
+				BeforeChange:    beforeChange,
+				DependsOn:       files,
+			})
+			files = append(files, linkPath)
+		}
+	}
 
 	// create config directory if configAttrs are set
 	if len(item.configAttrs) > 0 {

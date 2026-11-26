@@ -1,8 +1,13 @@
 package usbgadget
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path"
+	"strings"
+	"syscall"
 )
 
 type gadgetConfigItem struct {
@@ -13,6 +18,8 @@ type gadgetConfigItem struct {
 	configAttrs gadgetAttributes
 	configPath  []string
 	reportDesc  []byte
+	symlinks    []gadgetSymlink
+	linksOnly   bool
 	// inEndpoints is upstream's count of the IN endpoints the function
 	// takes. This build counts them with inEndpointsByKey instead, which
 	// also knows which of them carry data (see inendpoints.go); a test
@@ -21,6 +28,11 @@ type gadgetConfigItem struct {
 }
 
 type gadgetAttributes map[string]string
+
+type gadgetSymlink struct {
+	path   []string
+	target []string
+}
 
 type gadgetConfigItemWithKey struct {
 	key  string
@@ -70,11 +82,22 @@ var defaultGadgetConfig = map[string]gadgetConfigItem{
 	"mass_storage_lun0": massStorageLun0Config,
 	// serial console (CDC-ACM)
 	"serial_console": serialConsoleConfig,
+	// virtual camera (UVC)
+	"video_base":                  videoBaseConfig,
+	"video_control_header":        videoControlHeaderConfig,
+	"video_control_class_fs":      videoControlClassFSConfig,
+	"video_streaming_mjpeg":       videoStreamingMJPEGConfig,
+	"video_streaming_header":      videoStreamingHeaderConfig,
+	"video_streaming_class_fs":    videoStreamingClassFSConfig,
+	"video_links":                 videoLinksConfig,
 }
 
 func init() {
 	for key, item := range spareINConfigs() {
 		defaultGadgetConfig[key] = item
+	}
+	for _, f := range VideoFrameSizes {
+		defaultGadgetConfig["video_streaming_mjpeg_"+f.Key] = videoFrameConfig(f)
 	}
 }
 
@@ -88,6 +111,12 @@ func (u *UsbGadget) isGadgetConfigItemEnabled(itemKey string) bool {
 // isBaseGadgetConfigItemEnabled is the enabled state of an item that does
 // not depend on the endpoint plan.
 func (u *UsbGadget) isBaseGadgetConfigItemEnabled(itemKey string) bool {
+	// The MJPEG frame items, one for each of VideoFrameSizes.
+	if strings.HasPrefix(itemKey, "video_streaming_mjpeg_") {
+		size := u.customConfig.VideoSize
+		return u.enabledDevices.Video && u.customConfig.VideoCodec != "h264" &&
+			(!ValidVideoSize(size) || itemKey == "video_streaming_mjpeg_"+size)
+	}
 	switch itemKey {
 	case "absolute_mouse":
 		return u.enabledDevices.AbsoluteMouse
@@ -101,6 +130,14 @@ func (u *UsbGadget) isBaseGadgetConfigItemEnabled(itemKey string) bool {
 		return u.enabledDevices.MassStorage
 	case "serial_console":
 		return u.enabledDevices.SerialConsole
+	case "video_base",
+		"video_control_header",
+		"video_control_class_fs",
+		"video_streaming_mjpeg",
+		"video_streaming_header",
+		"video_streaming_class_fs",
+		"video_links":
+		return u.enabledDevices.Video && u.customConfig.VideoCodec != "h264"
 	case "audio":
 		return u.enabledDevices.Audio
 	default:
@@ -111,8 +148,54 @@ func (u *UsbGadget) isBaseGadgetConfigItemEnabled(itemKey string) bool {
 	}
 }
 
+// ValidVideoSize reports whether size names one of VideoFrameSizes.
+func ValidVideoSize(size string) bool {
+	for _, f := range VideoFrameSizes {
+		if f.Key == size {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidVideoFPS reports whether fps is one of VideoFrameRates.
+func ValidVideoFPS(fps int) bool {
+	for _, r := range VideoFrameRates {
+		if r == fps {
+			return true
+		}
+	}
+	return false
+}
+
+// videoIntervals is the dwFrameInterval list for a VideoFPS: the one rate,
+// or every rate (fastest first) for 0.
+func videoIntervals(fps int) (list, first string) {
+	if ValidVideoFPS(fps) {
+		i := uvcFrameInterval(fps)
+		return i, i
+	}
+	var parts []string
+	for _, r := range VideoFrameRates {
+		parts = append(parts, uvcFrameInterval(r))
+	}
+	return strings.Join(parts, "\n"), parts[0]
+}
+
+// syncVideoAttrs sets the frame rates of the MJPEG frame sizes.
+func (u *UsbGadget) syncVideoAttrs() {
+	intervals, first := videoIntervals(u.customConfig.VideoFPS)
+	for _, f := range VideoFrameSizes {
+		size := f.Key
+		if item, ok := u.configMap["video_streaming_mjpeg_"+size]; ok {
+			item.attrs["dwDefaultFrameInterval"] = first
+			item.attrs["dwFrameInterval"] = intervals
+		}
+	}
+}
 
 func (u *UsbGadget) loadGadgetConfig() {
+	u.syncVideoAttrs()
 	if u.customConfig.isEmpty {
 		u.log.Trace().Msg("using default gadget config")
 		return
@@ -237,7 +320,8 @@ func (u *UsbGadget) UpdateGadgetConfig() error {
 	// so always rebind here even if the configfs tree looks untouched.
 	_, err := u.configureUsbGadget(true, true)
 	if err != nil {
-		return u.logError("unable to update gadget config", err)
+		u.log.Error().Err(err).Msg("unable to update gadget config")
+		return err
 	}
 
 	return nil
@@ -257,7 +341,79 @@ func (u *UsbGadget) configureUsbGadget(resetUsb bool, forceRebind bool) (bool, e
 	return adopted, err
 }
 
+// videoFramesWanted is the MJPEG frame directories the configuration asks
+// for, and the frame intervals of each.
+func (u *UsbGadget) videoFramesWanted() (map[string]bool, string) {
+	wanted := map[string]bool{}
+	for _, f := range VideoFrameSizes {
+		if u.isBaseGadgetConfigItemEnabled("video_streaming_mjpeg_" + f.Key) {
+			wanted[f.Key+"p"] = true
+		}
+	}
+	intervals := ""
+	if item, ok := u.configMap["video_streaming_mjpeg_480"]; ok {
+		intervals = item.attrs["dwFrameInterval"]
+	}
+	return wanted, intervals
+}
+
+// dropStaleVideoFrames removes the MJPEG camera's frame descriptors when
+// they are not the ones the configuration asks for, so that the transaction
+// makes them again. configfs lets a frame change only while nothing links
+// to its format: it detaches the gadget and removes the function's links
+// first. It reports whether it removed the frames.
+func (u *UsbGadget) dropStaleVideoFrames() (bool, error) {
+	wanted, intervals := u.videoFramesWanted()
+	function := path.Join(u.kvmGadgetPath, "functions", "uvc.usb0")
+	frames := path.Join(function, "streaming", "mjpeg", "m")
+	entries, _ := os.ReadDir(frames)
+	existing := []string{}
+	stale := false
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		existing = append(existing, entry.Name())
+		current, _ := os.ReadFile(path.Join(frames, entry.Name(), "dwFrameInterval"))
+		if !wanted[entry.Name()] || strings.TrimSpace(string(current)) != strings.TrimSpace(intervals) {
+			stale = true
+		}
+	}
+	if len(wanted) == 0 || len(existing) == 0 || (!stale && len(existing) == len(wanted)) {
+		return false, nil
+	}
+	u.log.Info().Strs("frames", existing).Msg("rebuilding the USB camera's frame descriptors")
+	u.ResetHIDFiles()
+	_ = softDisconnect(u.udc)
+	if err := os.WriteFile(path.Join(u.kvmGadgetPath, "UDC"), []byte("\n"), 0644); err != nil &&
+		!os.IsNotExist(err) && !errors.Is(err, syscall.ENODEV) {
+		return false, fmt.Errorf("detach gadget to rebuild camera frames: %w", err)
+	}
+	for _, link := range []string{
+		path.Join(u.configC1Path, "uvc.usb0"),
+		path.Join(function, "streaming", "class", "fs", "h"),
+		path.Join(function, "streaming", "class", "hs", "h"),
+		path.Join(function, "streaming", "class", "ss", "h"),
+		path.Join(function, "streaming", "header", "h", "m"),
+	} {
+		if err := os.Remove(link); err != nil && !os.IsNotExist(err) {
+			return false, fmt.Errorf("unlink %s: %w", link, err)
+		}
+	}
+	for _, name := range existing {
+		if err := syscall.Rmdir(path.Join(frames, name)); err != nil {
+			return false, fmt.Errorf("remove camera frame %s: %w", name, err)
+		}
+	}
+	return true, nil
+}
+
 func (u *UsbGadget) configureUsbGadgetLocked(resetUsb bool, forceRebind bool) (bool, error) {
+	if resetUsb && forceRebind {
+		if _, err := u.dropStaleVideoFrames(); err != nil {
+			return false, err
+		}
+	}
 	u.externalReady = u.prepareExternalFunction()
 	u.setExternalDeviceRevision()
 	disconnected := false
@@ -290,16 +446,36 @@ func (u *UsbGadget) configureUsbGadgetLocked(resetUsb bool, forceRebind bool) (b
 		// rebindUsb, then quiesce the host session before the controller
 		// teardown so function drivers shut their endpoints down against a
 		// live controller.
+		// Unlinking any other function unbinds UVC too. Its embedded
+		// video_device cannot be registered a second time. Even when removing
+		// the other link makes the remaining order correct, recreate the links
+		// so configfs frees that UVC function and allocates a fresh instance.
+		if u.enabledDevices.Video && u.tx.reorderSymlinkChanges != nil {
+			u.tx.reorderSymlinkChanges.ForceRecreate = true
+		}
 		u.ResetHIDFiles()
 		_ = softDisconnect(u.udc)
 		disconnected = true
-		u.tx.RebindUsb(true)
+		// Reset stale endpoint state before attaching a fresh UVC function.
+		// Resetting DWC3 after WriteGadgetConfig would bind the same UVC
+		// video_device twice and fault the vendor kernel.
+		if u.enabledDevices.Video {
+			if err := resetControllerForVideo(u.udc, u.kvmGadgetPath); err != nil {
+				return err
+			}
+		} else {
+			u.tx.RebindUsb(true)
+		}
 		return nil
 	})
-	if err != nil && disconnected {
+	if err != nil && disconnected && !u.enabledDevices.Video {
 		_ = softConnect(u.udc)
 	}
-	// Either the rebind or the reconnect above re-enumerated the host.
+	// UVC binds deactivated and activates the composite gadget when its
+	// userspace control handler subscribes to SETUP events. Forcing the
+	// pull-up here exposes the camera before that handler is ready and can
+	// leave macOS unable to start capture after a layout change.
+	// Layout changes invalidate HID handover even when UVC activates USB later.
 	if disconnected {
 		u.resetHidHandover()
 	}
