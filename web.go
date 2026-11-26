@@ -183,6 +183,11 @@ func setupRouter() *gin.Engine {
 	// open when localAuthMode is noPassword (consistent with other endpoints).
 	r.GET("/metrics", metricsAuthMiddleware(), gin.WrapH(promhttp.Handler()))
 
+	// The terminal API takes the session cookie or the password as HTTP basic
+	// auth: a program that signed in would replace the browser's token.
+	terminalAuth := apiAuthMiddleware(APIScopeTerminal, "JetKVM terminal API")
+	r.GET(osServicesTerminalWSPath, terminalAuth, handleOSServicesTerminalWebSocket)
+	r.GET(osServicesTerminalStatusPath, terminalAuth, handleOSServicesTerminalStatus)
 	r.POST(deviceAPIPath, apiAuthMiddleware(APIScopeDevice, "JetKVM device API"), handleDeviceAPI)
 	// Developer mode protected routes
 	developerModeRouter := r.Group("/developer/")

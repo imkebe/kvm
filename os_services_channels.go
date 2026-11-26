@@ -41,10 +41,27 @@ const (
 	guestFileCloseDelay = 500 * time.Millisecond
 )
 
+// terminalSink is where a terminal session's output goes: the browser's
+// "guest-terminal" data channel or a terminal API WebSocket. Its methods run
+// with the session lock held and do not block.
+type terminalSink interface {
+	// Send passes shell output on. False: the client is backed up, and the
+	// session holds the output and offers it again.
+	Send(data []byte) bool
+	// Buffered is the output passed on that the client has not taken yet.
+	Buffered() int
+	// Close ends the client's side; a non-empty reason is shown first.
+	Close(reason string)
+}
+
 type guestTerminal struct {
 	id      uint32
-	channel *webrtc.DataChannel
-	// Output sent to the browser and not yet credited to the sender.
+	channel terminalSink
+	// api: a terminal API WebSocket, not the browser.
+	api bool
+	// token: the ID of the API token that opened it, if any.
+	token string
+	// Output sent to the client and not yet credited to the sender.
 	pendingCredit uint32
 	// startup is the lines still to be typed (terminalStartupLines): the
 	// first once the shell has printed something, its prompt, each next one
@@ -87,6 +104,31 @@ func (s *osServicesService) sendTerminalStartup(id uint32, t *guestTerminal, aft
 	s.link.Wake()
 }
 
+// guestChannelSink is the browser's "guest-terminal" data channel.
+type guestChannelSink struct {
+	channel *webrtc.DataChannel
+}
+
+func (d guestChannelSink) Send(data []byte) bool {
+	if d.channel.ReadyState() != webrtc.DataChannelStateOpen {
+		return true
+	}
+	if d.channel.BufferedAmount() > guestTerminalBuffered {
+		return false
+	}
+	for offset := 0; offset < len(data); offset += guestChannelMessageMax {
+		end := min(offset+guestChannelMessageMax, len(data))
+		if err := d.channel.Send(data[offset:end]); err != nil {
+			return true
+		}
+	}
+	return true
+}
+
+func (d guestChannelSink) Buffered() int { return int(d.channel.BufferedAmount()) }
+
+func (d guestChannelSink) Close(reason string) { closeGuestTerminalChannel(d.channel, reason) }
+
 type guestDrop struct {
 	id      uint32
 	channel *webrtc.DataChannel
@@ -112,7 +154,7 @@ func handleGuestTerminalChannel(d *webrtc.DataChannel) {
 				refusal = reason
 				return
 			}
-			terminal = &guestTerminal{id: id, channel: d}
+			terminal = &guestTerminal{id: id, channel: guestChannelSink{channel: d}}
 			terminal.startup = startup
 			s.terminals[id] = terminal
 		})
@@ -165,24 +207,15 @@ func closeGuestTerminalChannel(d *webrtc.DataChannel, reason string) {
 	}()
 }
 
-// TerminalOutput sends shell output to the terminal's channel. It holds the
-// output while the channel is backed up.
+// TerminalOutput sends shell output to the terminal's client. It holds the
+// output while the client is backed up.
 func (s *osServicesService) TerminalOutput(id uint32, data []byte) bool {
 	t, ok := s.terminals[id]
 	if !ok {
 		return true
 	}
-	if t.channel.ReadyState() != webrtc.DataChannelStateOpen {
-		return true
-	}
-	if t.channel.BufferedAmount() > guestTerminalBuffered {
+	if !t.channel.Send(data) {
 		return false
-	}
-	for offset := 0; offset < len(data); offset += guestChannelMessageMax {
-		end := min(offset+guestChannelMessageMax, len(data))
-		if err := t.channel.Send(data[offset:end]); err != nil {
-			return true
-		}
 	}
 	t.pendingCredit += uint32(len(data))
 	if len(t.startup) > 0 && len(data) > 0 {
@@ -193,11 +226,11 @@ func (s *osServicesService) TerminalOutput(id uint32, data []byte) bool {
 	return true
 }
 
-// flushTerminalCredits returns the output the browser took to the sender;
+// flushTerminalCredits returns the output the clients took to the sender;
 // called with the session lock held.
 func (s *osServicesService) flushTerminalCredits() {
 	for id, t := range s.terminals {
-		if t.pendingCredit >= guestTerminalCreditStep && t.channel.BufferedAmount() < guestTerminalBuffered {
+		if t.pendingCredit >= guestTerminalCreditStep && t.channel.Buffered() < guestTerminalBuffered {
 			s.session.TerminalCredit(id, t.pendingCredit)
 			t.pendingCredit = 0
 		}
@@ -210,7 +243,7 @@ func (s *osServicesService) TerminalClosed(id uint32, reason string, _ bool) {
 		return
 	}
 	delete(s.terminals, id)
-	closeGuestTerminalChannel(t.channel, reason)
+	t.channel.Close(reason)
 }
 
 // --- File drops -----------------------------------------------------------------

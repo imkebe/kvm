@@ -24,6 +24,11 @@ type OSServicesConfig struct {
 	DisplayMode      string `json:"display_mode"`
 	Adaptation       string `json:"adaptation,omitempty"`
 	ClipboardEnabled bool   `json:"clipboard_enabled"`
+
+	// TerminalAPIEnabled lets programs open shells on the target computer
+	// over /os-services/terminal/ws (os_services_terminal_ws.go). Off by
+	// default.
+	TerminalAPIEnabled bool `json:"terminal_api_enabled"`
 	// TerminalShell is the syntax of the browser terminal's shell: "auto"
 	// (or empty) works it out (chooseTerminalShell), or one of the kinds in
 	// os_services_terminal_shell.go. TerminalShellCommand is typed first into
@@ -145,6 +150,7 @@ func mergeOSServicesConfig(base OSServicesConfig, request map[string]any) (OSSer
 	}{
 		{"enabled", &merged.Enabled},
 		{"terminal_enabled", &merged.TerminalEnabled},
+		{"terminal_api_enabled", &merged.TerminalAPIEnabled},
 		{"terminal_mux_enabled", &merged.TerminalMuxEnabled},
 		{"files_enabled", &merged.FilesEnabled},
 		{"video_enabled", &merged.VideoEnabled},

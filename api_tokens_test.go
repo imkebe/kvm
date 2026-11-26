@@ -140,6 +140,15 @@ func TestAPITokenScopesOnRoutes(t *testing.T) {
 	if rec := do(http.MethodPost, deviceAPIPath, terminal.Token); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "device scope") {
 		t.Fatalf("terminal token on the device API: %d %s", rec.Code, rec.Body)
 	}
+	if rec := do(http.MethodGet, osServicesTerminalStatusPath, device.Token); rec.Code != http.StatusForbidden {
+		t.Fatalf("device token on the terminal API: %d", rec.Code)
+	}
+	if rec := do(http.MethodGet, osServicesTerminalStatusPath, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("terminal status without a token: %d", rec.Code)
+	}
+	if rec := do(http.MethodGet, osServicesTerminalStatusPath, terminal.Token); rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+		t.Fatalf("terminal token on the terminal API: %d %s", rec.Code, rec.Body)
+	}
 	rec := do(http.MethodGet, "/metrics", metrics.Token)
 	if rec.Code != http.StatusOK || rec.Header().Get(apiTokenHeaderExp) == "" {
 		t.Fatalf("metrics token: %d, expiry header %q", rec.Code, rec.Header().Get(apiTokenHeaderExp))
